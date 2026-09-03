@@ -931,10 +931,10 @@ function renderInsightSummary(){
   const topDrop = stats.topCategoryDecliners[0];
 
   if(topGain){
-    bullets.push(`${categoryLabel(topGain.name)} 직종 채용이 가장 많이 늘었어요 — <span class="up-text">+${topGain.delta}건${fmtPct(topGain.delta, topGain.prev)}</span>, 현재 ${topGain.cur}건.`);
+    bullets.push(`${categoryLabel(topGain.name)} 직종 채용이 가장 많이 늘었어요 <span class="up-text">+${topGain.delta}건${fmtPct(topGain.delta, topGain.prev)}</span>, 현재 ${topGain.cur}건.`);
   }
   if(topDrop && topDrop.name!==(topGain && topGain.name)){
-    bullets.push(`${categoryLabel(topDrop.name)} 직종 채용은 가장 많이 줄었어요 — <span class="down-text">${topDrop.delta}건${fmtPct(topDrop.delta, topDrop.prev)}</span>, 현재 ${topDrop.cur}건.`);
+    bullets.push(`${categoryLabel(topDrop.name)} 직종 채용은 가장 많이 줄었어요 <span class="down-text">${topDrop.delta}건${fmtPct(topDrop.delta, topDrop.prev)}</span>, 현재 ${topDrop.cur}건.`);
   }
 
   if(stats.empBreakdown.length){
@@ -945,10 +945,10 @@ function renderInsightSummary(){
   }
 
   if(stats.compGain && stats.compGain.delta>0){
-    bullets.push(`<b>${escapeHtml(stats.compGain.name)}</b>이(가) 채용 공고를 가장 많이 늘렸어요 — <span class="up-text">+${stats.compGain.delta}건</span>, 현재 ${stats.compGain.latest}건.`);
+    bullets.push(`<b>${escapeHtml(stats.compGain.name)}</b>이(가) 채용 공고를 가장 많이 늘렸어요 <span class="up-text">+${stats.compGain.delta}건</span>, 현재 ${stats.compGain.latest}건.`);
   }
   if(stats.compDrop && stats.compDrop.delta<0 && stats.compDrop.name!==(stats.compGain && stats.compGain.name)){
-    bullets.push(`<b>${escapeHtml(stats.compDrop.name)}</b>은(는) 채용 공고를 가장 많이 줄였어요 — <span class="down-text">${stats.compDrop.delta}건</span>, 현재 ${stats.compDrop.latest}건.`);
+    bullets.push(`<b>${escapeHtml(stats.compDrop.name)}</b>은(는) 채용 공고를 가장 많이 줄였어요 <span class="down-text">${stats.compDrop.delta}건</span>, 현재 ${stats.compDrop.latest}건.`);
   }
 
   document.getElementById('insightList').innerHTML = bullets.map(b=>`<li>${b}</li>`).join('');
