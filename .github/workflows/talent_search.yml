@@ -1,0 +1,44 @@
+name: 게임잡 인재풀 검색
+
+on:
+  workflow_dispatch:
+    inputs:
+      duty:
+        description: '직무 코드 (SearchCondition[duty], 예: 1)'
+        required: false
+        default: ''
+      career:
+        description: '경력 코드 (SearchCondition[career], 예: 5_99)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  search:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+
+      - name: 파이썬 설치
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 필요한 패키지 설치
+        run: pip install requests beautifulsoup4
+
+      - name: 인재검색 실행
+        run: python gamejob_talent_search.py --duty "${{ inputs.duty }}" --career "${{ inputs.career }}" --out result.csv
+
+      # 개인정보 성격이 있는 데이터라, 저장소에 커밋하지 않고
+      # 임시 다운로드 파일(아티팩트)로만 짧게(1일) 보관합니다.
+      - name: 결과를 다운로드 파일로 업로드 (1일 후 자동 삭제)
+        uses: actions/upload-artifact@v4
+        with:
+          name: talent-search-result
+          path: result.csv
+          retention-days: 1
