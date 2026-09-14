@@ -1,0 +1,1707 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>게임잡 채용 트래커</title>
+<!-- 폰트 및 외부 라이브러리 (기존 동일) -->
+<link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+  /* --- 디자인 시스템 토큰 (보고서 기준 적용) --- */
+  :root {
+    --color-primary: #3182f6; 
+    --color-primary-hover: #1b64da;
+    --color-text-title: #191f28; 
+    --color-text-body: #4e5968;
+    --color-text-muted: #8b95a1;
+    --color-bg-default: #ffffff; 
+    --color-bg-surface: #f9fafb; /* 옅은 회색 배경 */
+    --color-bg-surface-2: #f2f4f6; /* 조금 더 짙은 회색 배경 */
+    --color-border: #e5e8eb; 
+    --color-up: #f04452; /* 상승 (빨강) */
+    --color-up-soft: #fef0f1;
+    --color-down: #3182f6; /* 하락 (파랑) */
+    --color-down-soft: #eef4ff;
+    --radius-sm: 8px;
+    --radius-md: 14px;
+    --radius-lg: 20px; /* 극대화된 둥근 모서리 */
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  
+  body {
+    background: linear-gradient(180deg, #eaf3ff 0%, #f5f9ff 320px, #ffffff 700px);
+    color: var(--color-text-body);
+    font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Malgun Gothic', sans-serif;
+    line-height: 1.6;
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
+  
+  .wrap { max-width: 1800px; margin: 0 auto; padding: 0 40px 100px; }
+
+  /* --- 헤더 (블러 효과 및 깔끔한 여백) --- */
+  header {
+    display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;
+    position: sticky; top: 0; z-index: 50; 
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    padding: 16px 0; border-bottom: 1px solid var(--color-border);
+    margin-bottom: 40px;
+  }
+  header h1 { font-size: 22px; font-weight: 800; margin: 0; letter-spacing: -0.02em; color: var(--color-text-title); }
+  .header-logo { height: 28px; width: auto; object-fit: cover; vertical-align: middle; }
+  .header-title { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+
+  .upload-btn {
+    position: relative; overflow: hidden; display: inline-flex; align-items: center; gap: 6px;
+    background: var(--color-primary); color: #fff; border: none; border-radius: var(--radius-sm);
+    padding: 10px 18px; font-size: 14px; font-weight: 600; cursor: pointer; transition: background 0.2s;
+  }
+  .upload-btn:hover { background: var(--color-primary-hover); }
+  .upload-btn input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+  /* --- 상태 메시지 --- */
+  .empty { text-align: center; padding: 160px 20px; color: var(--color-text-muted); }
+  .empty strong { color: var(--color-text-title); display: block; font-size: 20px; margin-bottom: 12px; font-weight: 800; }
+
+  /* --- 상단 통계 요약 (카드 레이아웃 극대화) --- */
+  .stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 40px; }
+  .stat-card {
+    background: var(--color-bg-surface); border-radius: var(--radius-lg); padding: 32px;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .stat-card:hover { transform: translateY(-4px); box-shadow: 0 12px 24px rgba(0,0,0,0.04); }
+  .stat-card .label { color: var(--color-text-muted); font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+  .stat-card .num { font-size: 36px; font-weight: 800; letter-spacing: -0.02em; color: var(--color-text-title); }
+  .stat-card .num.up { color: var(--color-up); }
+  .stat-card .num.down { color: var(--color-down); }
+  @media (max-width: 640px) { .stat-row { grid-template-columns: 1fr; gap: 16px; } }
+
+  /* --- 홈 탭 히어로 배너 --- */
+  .hero-banner {
+    padding: 48px 32px 40px;
+    text-align: center;
+    margin-bottom: 24px;
+  }
+  .hero-title { font-size: 28px; font-weight: 800; color: var(--color-text-title); margin: 0 0 10px; letter-spacing: -0.02em; }
+  .hero-subtitle { font-size: 15px; color: var(--color-text-body); margin: 0 0 28px; }
+  .hero-search-bar {
+    max-width: 520px; margin: 0 auto; display: flex;
+    background: #fff; border: 2px solid var(--color-primary); border-radius: 999px; overflow: hidden;
+    box-shadow: 0 8px 24px rgba(49,130,246,0.12);
+  }
+  .hero-search-bar input {
+    flex: 1; border: none; padding: 14px 20px; font-size: 14.5px; outline: none;
+    background: transparent; color: var(--color-text-title);
+  }
+  .hero-search-bar button {
+    background: var(--color-primary); color: #fff; border: none; padding: 0 28px;
+    font-size: 14.5px; font-weight: 700; cursor: pointer; transition: background 0.2s;
+  }
+  .hero-search-bar button:hover { background: var(--color-primary-hover); }
+  @media (max-width: 640px) {
+    .hero-banner { padding: 32px 20px; }
+    .hero-title { font-size: 21px; }
+    .hero-search-bar { flex-direction: column; border-radius: var(--radius-md); }
+    .hero-search-bar button { padding: 12px; }
+  }
+
+  /* --- 네비게이션 탭 (토스 스타일) --- */
+  .nav-tabs { display: flex; gap: 28px; border-bottom: 1px solid var(--color-border); margin-bottom: 32px; overflow-x: auto; white-space: nowrap; }
+  .nav-tab {
+    background: none; border: none; padding: 14px 0; font-size: 18px; font-weight: 700;
+    color: var(--color-text-muted); cursor: pointer; border-bottom: 3px solid transparent;
+    display: inline-flex; align-items: center; gap: 6px; transition: color 0.2s;
+    text-decoration: none;
+  }
+  .nav-tab:hover { color: var(--color-text-title); }
+  .nav-tab.active { color: var(--color-text-title); border-bottom-color: var(--color-text-title); }
+  .nav-tab .icon-external { width: 16px; height: 16px; flex-shrink: 0; }
+  .view { display: none; animation: fadeIn 0.3s ease; }
+  .view.active { display: block; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* --- 패널 (독립된 모듈 카드) --- */
+  .panel {
+    background: #ffffff; border: 1px solid var(--color-border); border-radius: var(--radius-lg);
+    padding: 32px; margin-bottom: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.02);
+  }
+  .panel-title { font-size: 20px; font-weight: 800; margin: 0 0 20px; display: flex; justify-content: space-between; align-items: center; color: var(--color-text-title); }
+  .panel-title .see-all { font-size: 14px; font-weight: 600; color: var(--color-primary); cursor: pointer; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  @media (max-width: 760px) { .grid-2 { grid-template-columns: 1fr; } }
+  canvas { max-width: 100%; }
+
+  /* --- 검색 및 필터 태그 --- */
+  .search-input {
+    width: 100%; padding: 16px 20px; background: var(--color-bg-surface); border: 1px solid transparent;
+    border-radius: var(--radius-md); color: var(--color-text-title); font-size: 16px; margin-bottom: 16px;
+    transition: all 0.2s;
+  }
+  .search-input:focus { outline: none; border-color: var(--color-primary); background: #ffffff; box-shadow: 0 0 0 4px var(--color-down-soft); }
+
+  .sort-chips { display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; }
+  .chip {
+    background: var(--color-bg-surface-2); border: none; border-radius: 999px; padding: 8px 16px;
+    font-size: 14px; font-weight: 600; color: var(--color-text-muted); cursor: pointer; transition: all 0.2s;
+  }
+  .chip:hover { background: var(--color-border); }
+  .chip.active { background: var(--color-text-title); color: #fff; }
+
+  /* --- 랭킹 테이블 (미니멀리즘) --- */
+  table.rank { width: 100%; border-collapse: collapse; font-size: 16px; table-layout: fixed; }
+  table.rank th {
+    text-align: right; color: var(--color-text-muted); font-weight: 600; font-size: 13px;
+    padding: 12px 8px; border-bottom: 1px solid var(--color-border);
+  }
+  table.rank th:first-child, table.rank th:nth-child(2) { text-align: left; }
+  table.rank td {
+    padding: 16px 8px; border-bottom: 1px solid var(--color-bg-surface-2); text-align: right;
+    vertical-align: middle; line-height: 1.4;
+  }
+  table.rank tbody tr { cursor: pointer; transition: background 0.15s; }
+  table.rank tbody tr:hover { background: var(--color-bg-surface); }
+  table.rank tbody tr.selected { background: var(--color-down-soft); }
+  
+  table.rank th:nth-child(1), table.rank td:nth-child(1) { width: 40px; text-align: center; color: var(--color-text-muted); font-weight: 700; }
+  table.rank th:nth-child(2), table.rank td:nth-child(2) { width: auto; }
+  table.rank th:nth-child(3), table.rank td:nth-child(3) { width: 80px; }
+  table.rank th:nth-child(4), table.rank td:nth-child(4) { width: 70px; font-weight: 600; }
+  table.rank th:nth-child(5), table.rank td:nth-child(5) { width: 140px; }
+  table.rank.no-spark th:nth-child(3), table.rank.no-spark td:nth-child(3) { display: none; }
+
+  .name-cell-text { display: flex; flex-direction: column; justify-content: center; min-width: 0; overflow: hidden; }
+  .name-primary { font-weight: 700; color: var(--color-text-title); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .name-secondary { font-size: 13px; color: var(--color-text-muted); margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .name-primary-flat { font-weight: 700; color: var(--color-text-title); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .spark-cell svg { display: block; margin-left: auto; }
+  .delta-up { color: var(--color-up); font-weight: 700; }
+  .delta-down { color: var(--color-down); font-weight: 700; }
+  .delta-flat { color: var(--color-text-muted); }
+  .delta-new { color: var(--color-up); font-weight: 700; font-size: 12px; background: var(--color-up-soft); padding: 4px 8px; border-radius: 6px; }
+  .row-count { color: var(--color-text-muted); font-size: 13px; margin-top: 16px; font-weight: 600; }
+
+  /* --- 상세 패널 --- */
+  .detail-panel { background: #ffffff; border: 1px solid var(--color-primary); border-radius: var(--radius-lg); padding: 32px; margin-bottom: 24px; display: none; box-shadow: 0 8px 30px rgba(49, 130, 246, 0.1); }
+  .detail-panel.show { display: block; animation: fadeIn 0.3s ease; }
+  .dp-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+  .dp-title { font-size: 24px; font-weight: 800; color: var(--color-text-title); }
+  .dp-count { font-size: 28px; font-weight: 800; color: var(--color-primary); margin-bottom: 4px; }
+  .dp-sub { font-size: 14px; color: var(--color-text-muted); margin-bottom: 24px; font-weight: 600; }
+  
+  .dp-close { background: var(--color-bg-surface-2); border: none; color: var(--color-text-title); padding: 8px 12px; border-radius: 8px; font-size: 13px; cursor: pointer; font-weight: 700; transition: background 0.2s; }
+  .dp-close:hover { background: var(--color-border); }
+  .dp-back { background: none; border: none; color: var(--color-primary); font-size: 14px; cursor: pointer; font-weight: 700; padding: 0; margin-bottom: 16px; }
+  .dp-back:hover { text-decoration: underline; }
+  
+  .dp-homepage-btn { border: 1px solid var(--color-border); border-radius: 8px; padding: 8px 16px; font-size: 13px; font-weight: 700; color: var(--color-text-title); text-decoration: none; transition: background 0.2s; }
+  .dp-homepage-btn:hover { background: var(--color-bg-surface); }
+
+  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px 24px; margin-top: 24px; background: var(--color-bg-surface); padding: 24px; border-radius: var(--radius-md); }
+  .info-item-wide { grid-column: 1 / -1; }
+  .info-label { font-size: 13px; color: var(--color-text-muted); margin-bottom: 4px; font-weight: 600; }
+  .info-value { font-size: 16px; font-weight: 700; color: var(--color-text-title); }
+
+  .stock-section { margin-top: 40px; }
+  .stock-section h3 { font-size: 18px; font-weight: 800; margin: 0 0 16px; color: var(--color-text-title); }
+  .chart-subtitle { font-size: 14px; color: var(--color-text-muted); font-weight: 600; margin-bottom: 12px; }
+
+  /* --- 도넛 차트 및 리스트 --- */
+  .donut-section { display: flex; gap: 32px; align-items: center; flex-wrap: wrap; background: var(--color-bg-surface); padding: 24px; border-radius: var(--radius-md); }
+  .donut-canvas-wrap { width: 160px; height: 160px; flex-shrink: 0; }
+  .donut-legend { flex: 1; min-width: 200px; }
+  .donut-legend-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--color-border); font-size: 14px; font-weight: 600; }
+  .donut-legend-row:last-child { border-bottom: none; }
+  .donut-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 8px; }
+
+  .podium { display: flex; justify-content: center; align-items: flex-end; gap: 16px; margin-top: 16px; }
+  .podium-item { background: var(--color-bg-surface); border-radius: var(--radius-md); padding: 20px 12px; text-align: center; flex: 1; max-width: 160px; transition: transform 0.2s; }
+  .podium-item:hover { transform: translateY(-4px); box-shadow: 0 8px 20px rgba(0,0,0,0.05); }
+  .podium-item.first { background: #fffcf0; border: 2px solid #fce8a1; padding-top: 28px; padding-bottom: 24px; transform: translateY(-8px); }
+  .podium-item.first:hover { transform: translateY(-12px); }
+  .podium-medal { font-size: 32px; line-height: 1; }
+  .podium-item.first .podium-medal { font-size: 40px; }
+  .podium-name { font-weight: 800; font-size: 14px; margin-top: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-text-title); }
+  .podium-count { font-size: 13px; color: var(--color-text-muted); margin-top: 4px; font-weight: 600; }
+
+  /* --- 인사이트 & 리포트 패널 --- */
+  .insight-panel { background: var(--color-down-soft); border: none; }
+  .insight-panel .panel-title { color: var(--color-primary); }
+  .insight-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 12px; }
+  .insight-list li { font-size: 15px; line-height: 1.6; padding-left: 24px; position: relative; color: var(--color-text-title); }
+  .insight-list li::before { content: '•'; position: absolute; left: 6px; color: var(--color-primary); font-weight: 800; font-size: 18px; }
+  .insight-list b { font-weight: 800; }
+  .insight-list .up-text { color: var(--color-up); font-weight: 800; }
+  .insight-list .down-text { color: var(--color-down); font-weight: 800; }
+  .insight-footnote { margin-top: 20px; font-size: 13px; color: var(--color-text-muted); font-weight: 600; }
+
+  /* 리포트 내 버튼 그룹 */
+  .ai-comment-row { display: flex; gap: 12px; margin-top: 24px; flex-wrap: wrap; }
+  .ai-btn { background: var(--color-primary); color: #fff; border: none; border-radius: 12px; padding: 14px 24px; font-size: 15px; font-weight: 700; cursor: pointer; transition: background 0.2s; }
+  .ai-btn:hover { background: var(--color-primary-hover); }
+  .ai-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .ai-btn-secondary { background: var(--color-bg-surface-2); color: var(--color-text-title); }
+  .ai-btn-secondary:hover { background: var(--color-border); }
+  .ai-reset-btn { background: none; border: none; color: var(--color-text-muted); font-size: 13px; cursor: pointer; font-weight: 600; text-decoration: underline; padding: 14px 8px; }
+
+  .report-status-box { margin-top: 20px; background: var(--color-bg-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 24px; font-size: 15px; line-height: 1.6; color: var(--color-text-title); font-weight: 600; }
+  
+  .prompt-editor-wrap { margin-top: 20px; background: var(--color-bg-surface); border-radius: var(--radius-md); padding: 24px; }
+  .prompt-editor-label { font-size: 14px; color: var(--color-text-muted); line-height: 1.6; margin-bottom: 12px; font-weight: 600; }
+  .prompt-editor-textarea { width: 100%; box-sizing: border-box; font-family: 'SFMono-Regular', Consolas, monospace; font-size: 13px; line-height: 1.6; padding: 16px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: #fff; color: var(--color-text-title); resize: vertical; }
+
+  .report-history-title { font-size: 15px; color: var(--color-text-title); font-weight: 800; margin: 32px 0 16px; }
+  .report-history-list { display: flex; flex-wrap: wrap; gap: 10px; }
+  .report-history-chip { background: var(--color-bg-surface); border: 1px solid var(--color-border); border-radius: 999px; padding: 10px 20px; font-size: 14px; font-weight: 600; color: var(--color-text-body); cursor: pointer; transition: all 0.2s; }
+  .report-history-chip:hover { border-color: var(--color-text-title); color: var(--color-text-title); }
+  .report-history-chip.active { background: var(--color-text-title); color: #fff; border-color: var(--color-text-title); }
+
+  /* --- 모달 (바텀 시트 느낌의 중앙 팝업) --- */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(25, 31, 40, 0.6); z-index: 2000; display: flex; align-items: center; justify-content: center; padding: 24px; backdrop-filter: blur(4px); }
+  .modal-content { background: #fff; border-radius: 24px; max-width: 800px; width: 100%; max-height: 85vh; overflow-y: auto; padding: 40px; position: relative; box-shadow: 0 20px 40px rgba(0,0,0,0.1); }
+  .modal-close-btn { position: absolute; top: 24px; right: 24px; background: var(--color-bg-surface); border: none; border-radius: 50%; width: 40px; height: 40px; font-size: 16px; color: var(--color-text-title); cursor: pointer; transition: background 0.2s; font-weight: bold; }
+  .modal-close-btn:hover { background: var(--color-border); }
+  
+  .modal-title { font-size: 26px; font-weight: 800; margin-bottom: 8px; color: var(--color-text-title); }
+  .modal-range-label { font-size: 15px; color: var(--color-text-muted); font-weight: 600; margin-bottom: 6px; }
+  .report-meta { font-size: 13px; color: var(--color-text-muted); }
+  
+  .modal-chart-wrap { background: var(--color-bg-surface); border-radius: var(--radius-md); padding: 24px; margin: 24px 0; }
+  .modal-chart-title { font-size: 15px; font-weight: 800; color: var(--color-text-title); margin-bottom: 16px; }
+  .modal-chart-canvas-box { position: relative; height: 300px; width: 100%; }
+  
+  .modal-report-body { padding-top: 16px; }
+  .report-heading { font-size: 18px; font-weight: 800; margin: 32px 0 16px; color: var(--color-text-title); }
+  .report-heading:first-child { margin-top: 0; }
+  .report-para { margin: 0 0 16px; line-height: 1.7; font-size: 16px; color: var(--color-text-body); }
+  
+  .modal-footer { display: flex; gap: 12px; margin-top: 40px; padding-top: 24px; border-top: 1px solid var(--color-border); }
+
+  /* --- 리스트 공통 (세부 디테일) --- */
+  .bd-block h4 { font-size: 14px; color: var(--color-text-muted); font-weight: 700; margin: 0 0 12px; }
+  .bd-row { display: flex; justify-content: space-between; font-size: 15px; padding: 12px 0; border-bottom: 1px solid var(--color-bg-surface-2); font-weight: 600; }
+  .bd-row:last-child { border-bottom: none; }
+  
+  .detail-jobs h4 { font-size: 14px; color: var(--color-text-muted); font-weight: 700; margin: 24px 0 12px; }
+  .detail-jobs .dj-row { display: flex; justify-content: space-between; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--color-bg-surface-2); font-size: 15px; }
+  .detail-jobs .dj-row:last-child { border-bottom: none; }
+  .dj-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; font-weight: 600; color: var(--color-text-title); }
+  .dj-meta { color: var(--color-text-muted); font-size: 13px; flex-shrink: 0; font-weight: 500; }
+  .placeholder-hint { color: var(--color-text-muted); font-size: 15px; text-align: center; padding: 32px 0; font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- 헤더 -->
+  <header>
+    <div class="header-title" onclick="switchView('home')">
+      <img src="https://i.gamejob.co.kr/pc/images/gamejob_share.png" alt="GAMEJOB" class="header-logo">
+      <h1>채용 트래커</h1>
+    </div>
+    <label class="upload-btn" id="uploadBtn" style="display:none;">
+      데이터 업로드 (CSV)
+      <input type="file" id="fileInput" accept=".csv" multiple>
+    </label>
+  </header>
+
+  <div id="emptyState" class="empty">
+    <strong>데이터를 불러오는 중이에요...</strong>
+    잠시 후에도 안 뜨면 데이터를 직접 업로드 해주세요.
+  </div>
+
+  <div id="autoLoadNote" style="display:none;font-size:13px;color:var(--color-text-muted);margin:-20px 0 24px; font-weight:600;">
+    © KONGSTUDIOS. All rights reserved.
+  </div>
+
+  <div id="content" style="display:none;">
+    
+    <!-- 요약 통계 -->
+    <div class="stat-row" id="statRow"></div>
+
+    <!-- 탭 네비게이션 -->
+    <div class="nav-tabs">
+      <button class="nav-tab active" data-view="home">홈</button>
+      <button class="nav-tab" data-view="company">기업별</button>
+      <button class="nav-tab" data-view="category">직무별</button>
+      <button class="nav-tab" data-view="employment">고용형태</button>
+      <button class="nav-tab" data-view="report">월간 리포트</button>
+      <a class="nav-tab" href="https://pludi.co/trend/dashboard/" target="_blank" rel="noopener">
+        업계 뉴스
+        <svg class="icon-external" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M7 17L17 7M17 7H9M17 7V15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </a>
+    </div>
+
+    <!-- 1. 홈 -->
+    <div class="view active" id="view-home">
+      <div class="hero-banner">
+        <h2 class="hero-title">게임업계 채용 트렌드, 한눈에 파악하세요</h2>
+        <p class="hero-subtitle" id="heroSubtitle">채용 데이터를 실시간으로 분석합니다.</p>
+        <div class="hero-search-bar">
+          <input type="text" id="heroSearchInput" placeholder="관심 직무나 기업명(예: 클라이언트, 넥슨)을 검색해보세요">
+          <button type="button" onclick="handleHeroSearch()">검색</button>
+        </div>
+      </div>
+
+      <div class="panel" id="homeTrendPanel" style="display:none;">
+        <div class="panel-title">전체 채용 공고 추이</div>
+        <canvas id="trendChart" height="70"></canvas>
+      </div>
+
+      <div class="panel insight-panel" id="insightPanel" style="display:none;">
+        <div class="panel-title">📝 이번 달 채용 요약</div>
+        <ul class="insight-list" id="insightList"></ul>
+        <div class="insight-footnote">데이터 기반으로 자동 생성된 요약입니다.</div>
+      </div>
+      <div class="panel" id="insightPlaceholder" style="display:none;">
+        <div class="placeholder-hint">스냅샷이 2개 이상 쌓이면(다음 달부터) 여기에 트렌드 요약이 자동으로 나와요.</div>
+      </div>
+
+      <div class="grid-2">
+        <div class="panel">
+          <div class="panel-title">인기 직무 TOP 10 <span class="see-all" data-goto="category">전체보기</span></div>
+          <table class="rank" id="homeCategoryTable">
+            <thead><tr><th>순위</th><th>직무</th><th>추이</th><th>공고</th><th>전월비</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="panel">
+          <div class="panel-title">채용 활발 기업 TOP 10 <span class="see-all" data-goto="company">전체보기</span></div>
+          <table class="rank" id="homeCompanyTable">
+            <thead><tr><th>순위</th><th>기업</th><th>추이</th><th>공고</th><th>전월비</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. 기업별 -->
+    <div class="view" id="view-company">
+      <div class="detail-panel" id="companyDetail"></div>
+      <div id="companyListSection" class="panel">
+        <input type="text" class="search-input" id="companySearch" placeholder="기업명을 검색해보세요">
+        <div class="sort-chips" data-kind="company">
+          <button class="chip active" data-sort="count">공고 많은순</button>
+          <button class="chip" data-sort="increase">급상승순</button>
+          <button class="chip" data-sort="decrease">하락순</button>
+          <button class="chip" data-sort="name">이름순</button>
+        </div>
+        <table class="rank" id="companyRankTable">
+          <thead><tr><th>순위</th><th>기업명</th><th>추이</th><th>진행공고</th><th>전월대비</th></tr></thead>
+          <tbody id="companyRankBody"></tbody>
+        </table>
+        <div class="row-count" id="companyRowCount"></div>
+      </div>
+    </div>
+
+    <!-- 3. 공고별(직종) -->
+    <div class="view" id="view-category">
+      <div class="detail-panel" id="categoryDetail"></div>
+      <div class="panel">
+        <input type="text" class="search-input" id="categorySearch" placeholder="어떤 직무를 찾으시나요?">
+        <div class="sort-chips" data-kind="category">
+          <button class="chip active" data-sort="count">공고 많은순</button>
+          <button class="chip" data-sort="increase">급상승순</button>
+          <button class="chip" data-sort="decrease">하락순</button>
+          <button class="chip" data-sort="name">이름순</button>
+        </div>
+        <table class="rank" id="categoryRankTable">
+          <thead><tr><th>순위</th><th>직무명</th><th>추이</th><th>진행공고</th><th>전월대비</th></tr></thead>
+          <tbody id="categoryRankBody"></tbody>
+        </table>
+        <div class="row-count" id="categoryRowCount"></div>
+      </div>
+    </div>
+
+    <!-- 4. 고용형태별 -->
+    <div class="view" id="view-employment">
+      <div class="detail-panel" id="employmentDetail"></div>
+      <div class="panel">
+        <div class="panel-title">고용형태 분포</div>
+        <div class="donut-section">
+          <div class="donut-canvas-wrap"><canvas id="employmentDonutCanvas"></canvas></div>
+          <div class="donut-legend" id="employmentDonutLegend"></div>
+        </div>
+      </div>
+      <div class="panel">
+        <table class="rank" id="employmentRankTable">
+          <thead><tr><th>순위</th><th>고용형태</th><th>추이</th><th>진행공고</th><th>전월대비</th></tr></thead>
+          <tbody id="employmentRankBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 5. 월간 리포트 -->
+    <div class="view" id="view-report">
+      <div class="panel">
+        <div class="panel-title">📄 AI 월간 채용 리포트</div>
+        <div id="reportRangeLabel" style="font-size: 15px; color: var(--color-text-muted); font-weight: 600; margin-bottom: 24px;"></div>
+        
+        <div id="reportNoData" class="placeholder-hint" style="display:none;">
+          스냅샷이 2개 이상 있어야(다음 달부터) 리포트를 만들 수 있어요.
+        </div>
+        
+        <div id="reportControls" style="display:none;">
+          <div class="ai-comment-row">
+            <button class="ai-btn" id="reportGenBtn" onclick="generateMonthlyReport()">📄 리포트 생성하기</button>
+            <button class="ai-btn ai-btn-secondary" id="reportOpenBtn" style="display:none;" onclick="openLatestReport()">📖 최근 리포트 보기</button>
+            <button class="ai-reset-btn" id="promptToggleBtn" onclick="togglePromptEditor()">프롬프트 설정</button>
+            <button class="ai-reset-btn" onclick="resetAnthropicApiKey()">API 키 초기화</button>
+          </div>
+
+          <div id="promptEditorWrap" class="prompt-editor-wrap" style="display:none;">
+            <div class="prompt-editor-label">
+              해당 프롬프트 기반으로 AI가 뉴스를 검색하고 리포트를 생성합니다.
+              <button class="ai-reset-btn" style="padding:0; margin-left:8px;" onclick="resetPromptToDefault()">기본값 복구</button>
+            </div>
+            <textarea id="reportPromptEditor" class="prompt-editor-textarea" rows="14"></textarea>
+          </div>
+
+          <div id="reportStatusBox" class="report-status-box" style="display:none;"></div>
+
+          <div id="reportHistoryWrap" style="display:none;">
+            <h4 class="report-history-title">지난 리포트 아카이브</h4>
+            <div id="reportHistoryList" class="report-history-list"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- 월간 리포트 팝업 모달 -->
+<div id="reportModalOverlay" class="modal-overlay" style="display:none;" onclick="if(event.target===this) closeReportModal();">
+  <div class="modal-content">
+    <button class="modal-close-btn" onclick="closeReportModal()">✕</button>
+    <div>
+      <div class="modal-title">📄 월간 채용 리포트</div>
+      <div id="modalRangeLabel" class="modal-range-label"></div>
+      <div id="modalMeta" class="report-meta"></div>
+    </div>
+    <div id="modalChartWrap" class="modal-chart-wrap" style="display:none;">
+      <div class="modal-chart-title">📊 직무 그룹별 증감 요약</div>
+      <div class="modal-chart-canvas-box">
+        <canvas id="modalSummaryChart"></canvas>
+      </div>
+    </div>
+    <div id="modalReportBody" class="modal-report-body"></div>
+    <div id="modalPromptSection"></div>
+    <div class="modal-footer">
+      <button class="ai-btn" onclick="shareCurrentReport()">🔗 리포트 복사하기</button>
+      <button class="ai-btn ai-btn-secondary" onclick="closeReportModal()">닫기</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========================================== -->
+<!-- 아래부터는 기존 기능 동작을 위한 완벽히 동일한 JS -->
+<!-- ========================================== -->
+<script>
+let snapshots = [];
+let charts = {};
+let selected = {company:null, category:null, employment:null};
+let sortStateByKind = {company:'count', category:'count', employment:'count'};
+
+document.getElementById('fileInput').addEventListener('change', async (e)=>{
+  const files = Array.from(e.target.files);
+  if(!files.length) return;
+  const parsed = await Promise.all(files.map(parseFile));
+  applySnapshots(parsed);
+});
+
+function applySnapshots(parsed){
+  snapshots = parsed.filter(Boolean).sort((a,b)=> a.date.localeCompare(b.date));
+  if(!snapshots.length){
+    alert('csv를 읽지 못했어요. gamejob_tracker.py가 만든 snapshots 폴더의 csv 파일이 맞는지 확인해주세요.');
+    return;
+  }
+  render();
+}
+
+async function tryAutoLoad(){
+  const host = window.location.hostname;
+  const pathParts = window.location.pathname.split('/').filter(Boolean);
+  if(!host.endsWith('github.io') || !pathParts.length) return false;
+
+  const owner = host.split('.')[0];
+  const repo = pathParts[0];
+
+  try{
+    const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/data/snapshots`;
+    const res = await fetch(apiUrl, {cache:'no-store'});
+    if(!res.ok) return false;
+    const items = await res.json();
+    const csvFiles = items.filter(it => it.name.endsWith('.csv'));
+    if(!csvFiles.length) return false;
+
+    const parsed = await Promise.all(csvFiles.map(async (it)=>{
+      const r = await fetch(it.download_url, {cache:'no-store'});
+      if(!r.ok) return null;
+      const text = await r.text();
+      const dateMatch = it.name.match(/(\d{4}-\d{2}-\d{2})/);
+      const date = dateMatch ? dateMatch[1] : it.name;
+      const parsedCsv = Papa.parse(text, {header:true, skipEmptyLines:true});
+      return {date, jobs: parsedCsv.data.filter(row=>row.gi_no)};
+    }));
+
+    applySnapshots(parsed);
+    document.getElementById('autoLoadNote').style.display = 'block';
+    return true;
+  }catch(err){
+    return false;
+  }
+}
+
+window.addEventListener('DOMContentLoaded', async ()=>{
+  const ok = await tryAutoLoad();
+  if(!ok){
+    document.getElementById('uploadBtn').style.display = 'inline-flex';
+    document.getElementById('emptyState').innerHTML =
+      '<strong>자동으로 데이터를 불러오지 못했어요</strong>' +
+      '<span style="font-size:15px">GitHub Actions가 설정되지 않았거나 로컬 환경일 수 있습니다.<br>' +
+      '상단의 "데이터 업로드" 버튼을 통해 CSV 파일을 추가해주세요.</span>';
+  }
+});
+
+function parseFile(file){
+  return new Promise((resolve)=>{
+    const dateMatch = file.name.match(/(\d{4}-\d{2}-\d{2})/);
+    const date = dateMatch ? dateMatch[1] : file.name;
+    Papa.parse(file, {
+      header:true, skipEmptyLines:true, encoding:'UTF-8',
+      complete: (res)=> resolve({date, jobs: res.data.filter(r=>r.gi_no)}),
+      error: ()=> resolve(null)
+    });
+  });
+}
+
+function escapeHtml(s){
+  if(s==null) return '';
+  return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function jobCategories(j){
+  if(j.job_categories && j.job_categories.trim()){
+    return j.job_categories.split(';').map(s=>s.trim()).filter(Boolean);
+  }
+  return [j.job_function || '기타/미분류'];
+}
+
+const GROUP_INFO = [
+  ['서버', '🖥️', ['서버']],
+  ['인프라', '🌐', ['인프라', '기술지원', 'DevOps', '네트워크', 'IT운영', '시스템 관리']],
+  ['사운드', '🎵', ['사운드', '음향', '작곡', '영상']],
+  ['QA', '🧪', ['QA', '테스트', '운영', '고객', '커뮤니티']],
+  ['사업', '📈', ['사업', '마케팅', '홍보', '영업', 'BD', '퍼블리싱', '미디어', '전략']],
+  ['인사총무', '🗂️', ['경영지원', '인사', '총무', '재무', '회계', '법무', 'HR', '채용담당', '교육', '강의']],
+  ['기획', '📋', ['기획', '시나리오', '레벨디자인', '밸런스']],
+  ['아트(3D)', '🧊', ['모델링', '애니메이션', '이펙트', 'FX', '리깅', '3D']],
+  ['아트(2D)', '🎨', ['원화', '일러스트', '컨셉', '디자인', 'UI', 'UX', '그래픽', '2D']],
+  ['개발', '💻', ['클라이언트', '모바일', '엔진', 'AI 개발', '플랫폼', '프로그래', '개발자', '백엔드', '프론트', '게임개발']],
+];
+const DEFAULT_GROUP = ['기타', '🔹'];
+
+function classifyBroadGroup(categoryStr){
+  const s = categoryStr || '';
+  for(const [group, emoji, keywords] of GROUP_INFO){
+    if(keywords.some(kw => s.includes(kw))) return [group, emoji];
+  }
+  return DEFAULT_GROUP;
+}
+
+function categoryLabel(name){
+  const [, emoji] = classifyBroadGroup(name);
+  return `${emoji} ${name}`;
+}
+
+function employmentBucket(j){
+  const t = j.employment_type || '';
+  if(t.includes('정규')) return '정규직';
+  if(t.includes('계약')) return '계약직';
+  if(t.includes('인턴')) return '인턴직';
+  if(t.includes('파견')) return '파견직';
+  return '기타';
+}
+
+const KEY_FNS = {
+  company: j => [j.company_name].filter(Boolean),
+  category: jobCategories,
+  employment: j => [employmentBucket(j)],
+};
+
+function render(){
+  document.getElementById('emptyState').style.display='none';
+  document.getElementById('content').style.display='block';
+
+  setupNav();
+  renderStats();
+  renderHomeTrend();
+
+  ['company','category','employment'].forEach(kind=>{
+    buildEntityState(kind);
+  });
+
+  renderHomeRankings();
+  setupEntityView('company');
+  setupEntityView('category');
+  renderEmploymentView();
+  renderInsightSummary();
+  renderReportView();
+
+  if(!window.__reportEditorSetupDone){
+    document.getElementById('reportPromptEditor').addEventListener('input', (e)=>{
+      e.target.dataset.userEdited = '1';
+    });
+    window.__reportEditorSetupDone = true;
+  }
+}
+
+function setupNav(){
+  document.querySelectorAll('.nav-tab[data-view]').forEach(btn=>{
+    btn.onclick = ()=>{
+      const view = btn.dataset.view;
+      if(['company','category','employment'].includes(view) && selected[view]){
+        selected[view] = null;
+        if(view==='company' || view==='category') drawEntityTable(view);
+        if(view==='employment') renderEmploymentView();
+        drawDetail(view);
+      }
+      switchView(view);
+    };
+  });
+  document.querySelectorAll('.see-all').forEach(el=>{
+    el.onclick = ()=> switchView(el.dataset.goto);
+  });
+}
+
+function switchView(view){
+  document.querySelectorAll('.nav-tab').forEach(b=>b.classList.toggle('active', b.dataset.view===view));
+  document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active', v.id==='view-'+view));
+}
+
+function destroyChart(key){ if(charts[key]){ charts[key].destroy(); delete charts[key]; } }
+
+function renderStats(){
+  const latest = snapshots[snapshots.length-1];
+  const prev = snapshots.length>1 ? snapshots[snapshots.length-2] : null;
+  const row = document.getElementById('statRow');
+  let newCount=null, removedCount=null;
+  if(prev){
+    const prevIds = new Set(prev.jobs.map(j=>j.gi_no));
+    const curIds = new Set(latest.jobs.map(j=>j.gi_no));
+    newCount = latest.jobs.filter(j=>!prevIds.has(j.gi_no)).length;
+    removedCount = prev.jobs.filter(j=>!curIds.has(j.gi_no)).length;
+  }
+  row.innerHTML = `
+    <div class="stat-card"><div class="label">전체 진행중 공고 (${latest.date})</div><div class="num">${latest.jobs.length}</div></div>
+    <div class="stat-card"><div class="label">신규 등록된 공고</div><div class="num ${newCount!=null?'up':''}">${newCount!=null?'+'+newCount:'—'}</div></div>
+    <div class="stat-card"><div class="label">삭제 / 마감된 공고</div><div class="num ${removedCount!=null?'down':''}">${removedCount!=null?'-'+removedCount:'—'}</div></div>
+  `;
+
+  const heroSubtitle = document.getElementById('heroSubtitle');
+  if(heroSubtitle){
+    heroSubtitle.textContent = `현재 ${latest.jobs.length.toLocaleString()}건의 게임업계 채용공고를 실시간으로 분석합니다.`;
+  }
+}
+
+/* 홈 화면 히어로 검색창: 기업명/직무명 중 매칭되는 쪽 탭으로 이동해서 바로 검색 결과를 보여줌 */
+function handleHeroSearch(){
+  const input = document.getElementById('heroSearchInput');
+  const q = input.value.trim();
+  if(!q) return;
+
+  const qLower = q.toLowerCase();
+  const hasCompanyMatch = (entityState.company || []).some(e => e.name.toLowerCase().includes(qLower));
+  const hasCategoryMatch = (entityState.category || []).some(e => e.name.toLowerCase().includes(qLower));
+
+  // 기업명에 매칭되면 기업별로, 아니면 직무별로 (기본값도 직무별 — '클라이언트' 같은 검색이 더 흔함)
+  const targetKind = hasCompanyMatch && !hasCategoryMatch ? 'company' : 'category';
+
+  switchView(targetKind);
+  const searchInput = document.getElementById(targetKind + 'Search');
+  if(searchInput){
+    searchInput.value = q;
+    drawEntityTable(targetKind);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', ()=>{
+  const heroInput = document.getElementById('heroSearchInput');
+  if(heroInput){
+    heroInput.addEventListener('keydown', (e)=>{
+      if(e.key === 'Enter') handleHeroSearch();
+    });
+  }
+});
+
+function renderHomeTrend(){
+  const panel = document.getElementById('homeTrendPanel');
+  if(snapshots.length<2){ panel.style.display='none'; return; }
+  panel.style.display='block';
+  destroyChart('trend');
+  charts.trend = new Chart(document.getElementById('trendChart'), {
+    type:'line',
+    data:{ labels: snapshots.map(s=>s.date), datasets:[{
+      data: snapshots.map(s=>s.jobs.length),
+      borderColor:'#3182f6', backgroundColor:'rgba(49,130,246,0.08)',
+      fill:true, tension:0.4, pointRadius:4, pointBackgroundColor:'#3182f6', borderWidth: 3
+    }]},
+    options:{ plugins:{legend:{display:false}},
+      scales:{ x:{ticks:{color:'#8b95a1', font:{weight:'bold'}},grid:{display:false}}, y:{ticks:{color:'#8b95a1', font:{weight:'bold'}},grid:{color:'#f2f4f6'}} } }
+  });
+}
+
+const entityState = {};
+
+function buildSeries(getKeys){
+  const map = {};
+  snapshots.forEach((snap, idx)=>{
+    const counts = {};
+    snap.jobs.forEach(j=>{
+      getKeys(j).forEach(k=>{ if(k) counts[k]=(counts[k]||0)+1; });
+    });
+    Object.keys(counts).forEach(k=>{
+      if(!map[k]) map[k] = new Array(snapshots.length).fill(0);
+      map[k][idx] = counts[k];
+    });
+  });
+  return map;
+}
+
+function buildEntityState(kind){
+  const map = buildSeries(KEY_FNS[kind]);
+
+  let infoMap = {};
+  if(kind==='company'){
+    const latestSnap = snapshots[snapshots.length-1];
+    latestSnap.jobs.forEach(j=>{
+      if(j.company_name && !infoMap[j.company_name]){
+        infoMap[j.company_name] = {
+          logo: j.company_logo_url || null,
+          ceo: j.company_ceo || null,
+          foundedYear: j.company_founded_year || null,
+          flagshipGames: j.company_flagship_games || null,
+          homepage: j.company_homepage || null,
+        };
+      }
+    });
+  }
+
+  const entries = Object.keys(map).map(name=>{
+    const series = map[name];
+    const latest = series[series.length-1];
+    const prev = series.length>1 ? series[series.length-2] : null;
+    const delta = prev!=null ? latest-prev : null;
+    const pct = (delta!=null && prev>0) ? (delta/prev*100) : null;
+    const info = infoMap[name] || {};
+    return {name, series, latest, delta, pct, isNew: prev===0 && latest>0, logo: info.logo || null,
+      ceo: info.ceo || null, foundedYear: info.foundedYear || null,
+      flagshipGames: info.flagshipGames || null, homepage: info.homepage || null};
+  });
+  entityState[kind] = entries;
+}
+
+function sortEntries(entries, sortKey){
+  const arr = [...entries];
+  if(sortKey==='count') arr.sort((a,b)=> b.latest-a.latest);
+  else if(sortKey==='increase') arr.sort((a,b)=> (b.delta??-Infinity)-(a.delta??-Infinity));
+  else if(sortKey==='decrease') arr.sort((a,b)=> (a.delta??Infinity)-(b.delta??Infinity));
+  else if(sortKey==='name') arr.sort((a,b)=> a.name.localeCompare(b.name));
+  return arr;
+}
+
+function sparklineSvg(series){
+  const w=64,h=28,pad=3;
+  const min=Math.min(...series), max=Math.max(...series);
+  const range=(max-min)||1;
+  const step = series.length>1 ? (w-2*pad)/(series.length-1) : 0;
+  const pts = series.map((v,i)=>{
+    const x=pad+i*step, y=h-pad-((v-min)/range)*(h-2*pad);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+  const last=series[series.length-1], first=series[0];
+  const color = last>first?'#f04452':(last<first?'#3182f6':'#c7ccd3');
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+}
+
+function deltaCellHtml(e, hasHistory){
+  if(!hasHistory) return '<span class="delta-flat">—</span>';
+  if(e.isNew) return `<span class="delta-new">NEW</span>`;
+  if(e.delta==null || e.delta===0) return `<span class="delta-flat">-</span>`;
+  const cls = e.delta>0?'delta-up':(e.delta<0?'delta-down':'delta-flat');
+  const sign = e.delta>0?'+':'';
+  const pctText = e.pct!=null ? ` (${e.pct>0?'+':''}${e.pct.toFixed(0)}%)` : '';
+  const arrow = e.delta>0?'▲':(e.delta<0?'▼':'');
+  return `<span class="${cls}">${arrow} ${sign}${e.delta}${pctText}</span>`;
+}
+
+function logoImgHtml(e, size){
+  if(!e.logo) return '';
+  return `<img src="${escapeHtml(e.logo)}" alt="" loading="lazy" width="${size}" height="${size}"
+    style="border-radius:8px;object-fit:contain;background:#fff;border:1px solid var(--color-border);vertical-align:middle;margin-right:12px;flex-shrink:0;"
+    onerror="this.style.display='none'">`;
+}
+
+function nameCellContent(e, kind, displayName){
+  if(kind === 'company'){
+    const game = e.flagshipGames ? e.flagshipGames.split(',')[0].trim() : '';
+    const secondary = game ? `<div class="name-secondary">${escapeHtml(game)}</div>` : '';
+    return `${logoImgHtml(e, 36)}<div class="name-cell-text"><div class="name-primary">${escapeHtml(displayName)}</div>${secondary}</div>`;
+  }
+  if(kind === 'category'){
+    const [group] = classifyBroadGroup(e.name);
+    return `<div class="name-cell-text"><div class="name-primary">${escapeHtml(displayName)}</div><div class="name-secondary">${escapeHtml(group)} 그룹</div></div>`;
+  }
+  return `${logoImgHtml(e, 24)}<span class="name-primary-flat">${escapeHtml(displayName)}</span>`;
+}
+
+function renderRankRows(tbodyEl, entries, kind, limit, navigateOnClick){
+  const hasHistory = snapshots.length>1;
+  const showSpark = snapshots.length>=3;
+  const list = limit ? entries.slice(0,limit) : entries;
+
+  const table = tbodyEl.closest('table');
+  if(table) table.classList.toggle('no-spark', !showSpark);
+
+  tbodyEl.innerHTML = list.map((e,i)=>{
+    const sel = selected[kind]===e.name;
+    const displayName = kind==='category' ? categoryLabel(e.name) : e.name;
+    return `
+      <tr class="${sel?'selected':''}" data-name="${escapeHtml(e.name)}" data-kind="${kind}">
+        <td>${i+1}</td>
+        <td class="name-cell" style="display:flex;align-items:center;min-width:0;">${nameCellContent(e, kind, displayName)}</td>
+        <td class="spark-cell">${showSpark ? sparklineSvg(e.series) : ''}</td>
+        <td style="font-weight:700; color:var(--color-text-title);">${e.latest}</td>
+        <td>${deltaCellHtml(e, hasHistory)}</td>
+      </tr>
+    `;
+  }).join('');
+  tbodyEl.querySelectorAll('tr').forEach(tr=>{
+    if(navigateOnClick){
+      tr.onclick = ()=> goToEntityDetail(tr.dataset.kind, tr.dataset.name);
+    }else{
+      tr.onclick = ()=> selectEntity(tr.dataset.kind, tr.dataset.name);
+    }
+  });
+}
+
+function goToEntityDetail(kind, name){
+  selected[kind] = name;
+  switchView(kind);
+  renderHomeRankings();
+  if(kind==='company' || kind==='category') drawEntityTable(kind);
+  if(kind==='employment') renderEmploymentView();
+  drawDetail(kind);
+}
+
+function renderHomeRankings(){
+  const catEntries = sortEntries(entityState.category, 'count');
+  const compEntries = sortEntries(entityState.company, 'count');
+  renderRankRows(document.querySelector('#homeCategoryTable tbody'), catEntries, 'category', 10, true);
+  renderRankRows(document.querySelector('#homeCompanyTable tbody'), compEntries, 'company', 10, true);
+}
+
+function fmtPct(delta, prev){
+  if(prev>0) return ` (${delta>0?'+':''}${(delta/prev*100).toFixed(0)}%)`;
+  if(delta>0) return ' (신규)';
+  return '';
+}
+
+function computeGroupDeltasForRange(prevDate, dateStr){
+  const prevSnap = snapshots.find(s=>s.date===prevDate);
+  const latestSnap = snapshots.find(s=>s.date===dateStr);
+  if(!prevSnap || !latestSnap) return null;
+
+  const groupCountsOf = (jobs)=>{
+    const c = {}; GROUP_ORDER.forEach(g=>c[g]=0);
+    jobs.forEach(j=>{
+      const groupsHit = new Set(jobCategories(j).map(x=>classifyBroadGroup(x)[0]));
+      groupsHit.forEach(g=>{ if(c[g]!=null) c[g]++; });
+    });
+    return c;
+  };
+  const curG = groupCountsOf(latestSnap.jobs), prevG = groupCountsOf(prevSnap.jobs);
+  return GROUP_ORDER.map(g=>({g, delta:curG[g]-prevG[g], cur:curG[g], prev:prevG[g]}));
+}
+
+function computeMonthlyStats(){
+  if(snapshots.length<2) return null;
+  const latest = snapshots[snapshots.length-1];
+  const prev = snapshots[snapshots.length-2];
+
+  const totalDelta = latest.jobs.length - prev.jobs.length;
+
+  const groupCountsOf = (jobs)=>{
+    const c = {}; GROUP_ORDER.forEach(g=>c[g]=0);
+    jobs.forEach(j=>{
+      const groupsHit = new Set(jobCategories(j).map(x=>classifyBroadGroup(x)[0]));
+      groupsHit.forEach(g=>{ if(c[g]!=null) c[g]++; });
+    });
+    return c;
+  };
+  const curG = groupCountsOf(latest.jobs), prevG = groupCountsOf(prev.jobs);
+  const groupDeltas = GROUP_ORDER.map(g=>({g, delta:curG[g]-prevG[g], cur:curG[g], prev:prevG[g]}))
+    .filter(d=> d.cur>0 || d.prev>0);
+
+  const empCountsOf = (jobs)=>{
+    const c = {};
+    jobs.forEach(j=>{ const b = employmentBucket(j); c[b] = (c[b]||0)+1; });
+    return c;
+  };
+  const curE = empCountsOf(latest.jobs);
+  const prevE = empCountsOf(prev.jobs);
+  const empBreakdown = Object.keys(curE).map(name=>({
+    name, cur: curE[name], prev: prevE[name]||0,
+    pct: Number((curE[name]/latest.jobs.length*100).toFixed(1))
+  })).sort((a,b)=>b.cur-a.cur);
+
+  const compSorted = [...entityState.company].filter(e=>e.delta!=null).sort((a,b)=>b.delta-a.delta);
+  const compGain = compSorted[0];
+  const compDrop = compSorted[compSorted.length-1];
+  const topGainers = compSorted.filter(e=>e.delta>0).slice(0,8);
+  const topDecliners = [...compSorted].reverse().filter(e=>e.delta<0).slice(0,8);
+
+  const catCountsOf = (jobs)=>{
+    const c = {};
+    jobs.forEach(j=> jobCategories(j).forEach(cat=>{ c[cat]=(c[cat]||0)+1; }));
+    return c;
+  };
+  const curCat = catCountsOf(latest.jobs), prevCat = catCountsOf(prev.jobs);
+  const catKeys = new Set([...Object.keys(curCat), ...Object.keys(prevCat)]);
+  const categoryDeltas = [...catKeys].map(name=>({
+    name, cur: curCat[name]||0, prev: prevCat[name]||0, delta: (curCat[name]||0)-(prevCat[name]||0)
+  })).sort((a,b)=> b.delta - a.delta);
+  const topCategoryGainers = categoryDeltas.filter(d=>d.delta>0).slice(0,8);
+  const topCategoryDecliners = [...categoryDeltas].reverse().filter(d=>d.delta<0).slice(0,8);
+
+  return {
+    date: latest.date, prevDate: prev.date,
+    latestTotal: latest.jobs.length, prevTotal: prev.jobs.length, totalDelta,
+    groupDeltas, empBreakdown, compGain, compDrop, topGainers, topDecliners,
+    topCategoryGainers, topCategoryDecliners,
+  };
+}
+
+function renderInsightSummary(){
+  const panel = document.getElementById('insightPanel');
+  const placeholder = document.getElementById('insightPlaceholder');
+
+  const stats = computeMonthlyStats();
+  if(!stats){
+    panel.style.display = 'none';
+    placeholder.style.display = 'block';
+    return;
+  }
+  placeholder.style.display = 'none';
+  panel.style.display = 'block';
+
+  const bullets = [];
+
+  if(stats.totalDelta > 0){
+    bullets.push(`전체 채용 공고가 지난달보다 <span class="up-text">${stats.totalDelta}건 늘어난</span> ${stats.latestTotal}건이에요.`);
+  }else if(stats.totalDelta < 0){
+    bullets.push(`전체 채용 공고가 지난달보다 <span class="down-text">${Math.abs(stats.totalDelta)}건 줄어든</span> ${stats.latestTotal}건이에요.`);
+  }else{
+    bullets.push(`전체 채용 공고 수는 지난달과 동일한 ${stats.latestTotal}건이에요.`);
+  }
+
+  const topGain = stats.topCategoryGainers[0];
+  const topDrop = stats.topCategoryDecliners[0];
+
+  if(topGain){
+    bullets.push(`${categoryLabel(topGain.name)} 직군 채용이 가장 많이 늘었어요 — <span class="up-text">+${topGain.delta}건${fmtPct(topGain.delta, topGain.prev)}</span> (현재 ${topGain.cur}건).`);
+  }
+  if(topDrop && topDrop.name!==(topGain && topGain.name)){
+    bullets.push(`${categoryLabel(topDrop.name)} 직군 채용은 가장 많이 줄었어요 — <span class="down-text">${topDrop.delta}건${fmtPct(topDrop.delta, topDrop.prev)}</span> (현재 ${topDrop.cur}건).`);
+  }
+
+  if(stats.empBreakdown.length){
+    const top = stats.empBreakdown[0];
+    const empDelta = top.cur - top.prev;
+    const deltaText = empDelta!==0 ? ` (지난달 대비 ${empDelta>0?'+':''}${empDelta}건)` : '';
+    bullets.push(`고용형태는 <b>${top.name}</b> 비중이 ${top.pct}%로 가장 높습니다 (${top.cur}건)${deltaText}.`);
+  }
+
+  if(stats.compGain && stats.compGain.delta>0){
+    bullets.push(`<b>${escapeHtml(stats.compGain.name)}</b>이(가) 채용 공고를 가장 많이 늘렸어요 — <span class="up-text">+${stats.compGain.delta}건</span> (현재 ${stats.compGain.latest}건).`);
+  }
+  if(stats.compDrop && stats.compDrop.delta<0 && stats.compDrop.name!==(stats.compGain && stats.compGain.name)){
+    bullets.push(`<b>${escapeHtml(stats.compDrop.name)}</b>은(는) 채용 공고를 가장 많이 줄였어요 — <span class="down-text">${stats.compDrop.delta}건</span> (현재 ${stats.compDrop.latest}건).`);
+  }
+
+  document.getElementById('insightList').innerHTML = bullets.map(b=>`<li>${b}</li>`).join('');
+}
+
+function getAnthropicApiKey(promptIfMissing){
+  let key = localStorage.getItem('anthropic_api_key');
+  if(!key && promptIfMissing){
+    key = window.prompt('Anthropic API 키를 입력하세요 (이 브라우저에만 저장됩니다).');
+    if(key) localStorage.setItem('anthropic_api_key', key.trim());
+  }
+  return key ? key.trim() : null;
+}
+
+function resetAnthropicApiKey(){
+  localStorage.removeItem('anthropic_api_key');
+  alert('저장된 API 키를 삭제했습니다.');
+}
+
+function loadReportsStore(){
+  try{ return JSON.parse(localStorage.getItem('monthly_reports_v1') || '{}'); }
+  catch(e){ return {}; }
+}
+function saveReportsStore(store){
+  localStorage.setItem('monthly_reports_v1', JSON.stringify(store));
+}
+function reportKeyFor(stats){
+  return `${stats.prevDate}__${stats.date}`;
+}
+
+let currentReportStats = null;
+
+function renderReportView(){
+  const stats = computeMonthlyStats();
+  currentReportStats = stats;
+  const noData = document.getElementById('reportNoData');
+  const controls = document.getElementById('reportControls');
+  const rangeLabel = document.getElementById('reportRangeLabel');
+
+  if(!stats){
+    noData.style.display = 'block';
+    controls.style.display = 'none';
+    return;
+  }
+  noData.style.display = 'none';
+  controls.style.display = 'block';
+  rangeLabel.textContent = `기준 기간: ${stats.prevDate} → ${stats.date}`;
+
+  const editor = document.getElementById('reportPromptEditor');
+  if(!editor.dataset.userEdited){
+    editor.value = buildReportPrompt(stats);
+  }
+
+  const store = loadReportsStore();
+  const key = reportKeyFor(stats);
+  const btn = document.getElementById('reportGenBtn');
+  const openBtn = document.getElementById('reportOpenBtn');
+  btn.textContent = store[key] ? '📄 이번 달 리포트 재작성' : '📄 리포트 생성하기';
+  openBtn.style.display = store[key] ? 'inline-flex' : 'none';
+
+  document.getElementById('reportStatusBox').style.display = 'none';
+  renderReportHistory(key);
+}
+
+function togglePromptEditor(){
+  const wrap = document.getElementById('promptEditorWrap');
+  wrap.style.display = wrap.style.display === 'none' ? 'block' : 'none';
+}
+
+function resetPromptToDefault(){
+  const editor = document.getElementById('reportPromptEditor');
+  delete editor.dataset.userEdited;
+  if(currentReportStats) editor.value = buildReportPrompt(currentReportStats);
+}
+
+function formatReportBodyHtml(text){
+  const lines = text.replace(/\r\n/g, '\n').split('\n').map(l => l.trim());
+  const blocks = [];
+  let currentContent = [];
+
+  function flushContent(){
+    if(currentContent.length){
+      blocks.push({ type: 'content', text: currentContent.join(' ') });
+      currentContent = [];
+    }
+  }
+
+  lines.forEach(line=>{
+    if(!line) return;
+    const isHeading = /^\d+\.\s?\S/.test(line) && line.length < 40;
+    if(isHeading){
+      flushContent();
+      blocks.push({ type: 'heading', text: line });
+    }else{
+      currentContent.push(line);
+    }
+  });
+  flushContent();
+
+  return blocks.map(b=>{
+    if(b.type === 'heading') return `<h4 class="report-heading">${escapeHtml(b.text)}</h4>`;
+    return chunkBySentences(b.text).map(p=>`<p class="report-para">${escapeHtml(p)}</p>`).join('');
+  }).join('');
+}
+
+function chunkBySentences(text, perParagraph=3){
+  const protectedText = text.replace(/(\d)\.(\d)/g, '$1@@DOT@@$2');
+  const sentences = (protectedText.match(/[^.!?]+[.!?]+(\s|$)/g) || [protectedText])
+    .map(s => s.replace(/@@DOT@@/g, '.'));
+  const paras = [];
+  for(let i=0; i<sentences.length; i+=perParagraph){
+    const chunk = sentences.slice(i, i+perParagraph).join('').trim();
+    if(chunk) paras.push(chunk);
+  }
+  return paras.length ? paras : [text];
+}
+
+let currentModalEntry = null;
+
+function openReportModal(entry){
+  currentModalEntry = entry;
+  document.getElementById('modalRangeLabel').textContent = entry.range ? `비교 기간: ${entry.range}` : '';
+  document.getElementById('modalMeta').textContent = `생성 시각: ${entry.generatedAt}`;
+  document.getElementById('modalReportBody').innerHTML = formatReportBodyHtml(entry.text);
+
+  renderModalSummaryChart(entry);
+  document.getElementById('reportModalOverlay').style.display = 'flex';
+}
+
+function renderModalSummaryChart(entry){
+  const chartWrap = document.getElementById('modalChartWrap');
+  destroyChart('modalSummary');
+
+  if(!entry.range){ chartWrap.style.display = 'none'; return; }
+  const [prevDate, dateStr] = entry.range.split(' → ');
+  const groupDeltas = computeGroupDeltasForRange(prevDate, dateStr);
+
+  if(!groupDeltas){ chartWrap.style.display = 'none'; return; }
+  chartWrap.style.display = 'block';
+
+  charts.modalSummary = new Chart(document.getElementById('modalSummaryChart'), {
+    type:'bar',
+    data:{
+      labels: groupDeltas.map(d=>`${GROUP_EMOJI_MAP[d.g]} ${d.g}`),
+      datasets:[{
+        data: groupDeltas.map(d=>d.delta),
+        backgroundColor: groupDeltas.map(d=> d.delta>0 ? '#f04452' : (d.delta<0 ? '#3182f6' : '#c7ccd3')),
+        borderRadius:6,
+      }]
+    },
+    options:{
+      indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}},
+      scales:{
+        x:{ticks:{color:'#8b95a1'}, grid:{color:'#f2f4f6'}},
+        y:{ticks:{color:'#191f28', font:{size:13, weight:'bold'}}, grid:{display:false}}
+      }
+    }
+  });
+}
+
+function closeReportModal(){
+  document.getElementById('reportModalOverlay').style.display = 'none';
+  destroyChart('modalSummary');
+  currentModalEntry = null;
+}
+
+async function shareCurrentReport(){
+  if(!currentModalEntry) return;
+  const shareText = `[채용 트래커] 월간 리포트${currentModalEntry.range ? ' ('+currentModalEntry.range+')' : ''}\n\n${currentModalEntry.text}`;
+
+  if(navigator.share){
+    try{ await navigator.share({ title: '채용 트래커 - 월간 리포트', text: shareText }); return; }
+    catch(e){}
+  }
+  try{
+    await navigator.clipboard.writeText(shareText);
+    alert('리포트 내용이 복사되었습니다.');
+  }catch(e){
+    alert('복사에 실패했어요. 권한을 확인해주세요.');
+  }
+}
+
+function openLatestReport(){
+  const stats = computeMonthlyStats();
+  if(!stats) return;
+  const store = loadReportsStore();
+  const entry = store[reportKeyFor(stats)];
+  if(entry) openReportModal(entry);
+}
+
+function renderReportHistory(activeKey){
+  const store = loadReportsStore();
+  const keys = Object.keys(store).sort().reverse();
+  const wrap = document.getElementById('reportHistoryWrap');
+  const list = document.getElementById('reportHistoryList');
+
+  if(!keys.length){ wrap.style.display = 'none'; return; }
+  wrap.style.display = 'block';
+
+  list.innerHTML = keys.map(k=>{
+    const [from, to] = k.split('__');
+    const active = k === activeKey ? 'active' : '';
+    return `<button class="report-history-chip ${active}" data-key="${escapeHtml(k)}">${escapeHtml(from)} → ${escapeHtml(to)}</button>`;
+  }).join('');
+
+  list.querySelectorAll('.report-history-chip').forEach(chip=>{
+    chip.onclick = ()=>{
+      openReportModal(store[chip.dataset.key]);
+    };
+  });
+}
+
+function buildReportPrompt(stats){
+  const groupLines = stats.groupDeltas.map(d=> `- ${d.g}: 이번달 ${d.cur}건 (지난달 ${d.prev}건, ${d.delta>=0?'+':''}${d.delta}건)`).join('\n');
+  const empLines = stats.empBreakdown.map(e=> `- ${e.name}: 이번달 ${e.cur}건 (${e.pct}%), 지난달 ${e.prev}건`).join('\n');
+  const gainerLines = stats.topGainers.map(e=> `- ${e.name}: ${e.latest-e.delta}건 → ${e.latest}건 (+${e.delta}건)`).join('\n') || '(없음)';
+  const declinerLines = stats.topDecliners.map(e=> `- ${e.name}: ${e.latest-e.delta}건 → ${e.latest}건 (${e.delta}건)`).join('\n') || '(없음)';
+  
+  return `너는 게임업계 채용 시장을 분석하는 시니어 애널리스트야. 아래는 수집한 국내 게임업계 채용공고의 ${stats.prevDate} 대비 ${stats.date} 변화 통계야.
+
+[전체 공고 수] 이번달(${stats.date}): ${stats.latestTotal}건, 지난달(${stats.prevDate}): ${stats.prevTotal}건 (${stats.totalDelta>=0?'+':''}${stats.totalDelta}건)
+[직무 그룹별 증감]
+${groupLines}
+[고용형태별 비중]
+${empLines}
+[채용을 가장 많이 늘린 기업]
+${gainerLines}
+[채용을 가장 많이 줄인 기업]
+${declinerLines}
+
+작성 지침:
+1. 아래 구성으로 섹션을 나눠서 작성해줘 (마크다운 없이 "1. 제목" 형태 평문 사용):
+   1. 전체 요약
+   2. 직무별 트렌드
+   3. 주요 기업 동향
+   4. 고용형태 트렌드
+   5. 종합 인사이트 및 다음 달 전망
+2. 웹 검색 툴을 사용해 최근 기업 동향(신작, 투자 등)을 파악하여 내용을 풍부하게 만들어줘.
+3. 전체 분량은 800~1300자 내외.`;
+}
+
+async function generateMonthlyReport(){
+  const stats = computeMonthlyStats();
+  if(!stats) return;
+
+  const apiKey = getAnthropicApiKey(true);
+  if(!apiKey) return;
+
+  const editor = document.getElementById('reportPromptEditor');
+  const promptText = (editor.value || '').trim() || buildReportPrompt(stats);
+
+  const statusBox = document.getElementById('reportStatusBox');
+  const btn = document.getElementById('reportGenBtn');
+  statusBox.style.display = 'block';
+  statusBox.textContent = '뉴스를 검색하며 AI 리포트를 작성 중입니다. 잠시만 기다려주세요...';
+  btn.disabled = true;
+
+  try{
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-5',
+        max_tokens: 10000,
+        messages: [{ role: 'user', content: promptText }],
+        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 4 }]
+      })
+    });
+
+    if(!res.ok){
+      statusBox.textContent = res.status === 401 ? 'API 키가 올바르지 않습니다. 초기화 후 다시 시도해주세요.' : '요청이 실패했습니다.';
+      return;
+    }
+
+    const data = await res.json();
+    const text = (data.content || []).filter(c=>c.type==='text').map(c=>c.text).join('\n\n').trim();
+
+    if(!text) { statusBox.textContent = '리포트 생성에 실패했습니다.'; return; }
+
+    const store = loadReportsStore();
+    const key = reportKeyFor(stats);
+    const entry = { generatedAt: new Date().toLocaleString('ko-KR'), range: `${stats.prevDate} → ${stats.date}`, text, prompt: promptText };
+    store[key] = entry;
+    saveReportsStore(store);
+
+    statusBox.style.display = 'none';
+    document.getElementById('reportOpenBtn').style.display = 'inline-flex';
+    renderReportHistory(key);
+    btn.textContent = '📄 리포트 재작성';
+    openReportModal(entry);
+  }catch(err){
+    statusBox.textContent = '네트워크 오류가 발생했습니다.';
+  }finally{
+    btn.disabled = false;
+  }
+}
+
+function setupEntityView(kind){
+  const searchEl = document.getElementById(kind+'Search');
+  searchEl.oninput = ()=> drawEntityTable(kind);
+
+  document.querySelectorAll(`.sort-chips[data-kind="${kind}"] .chip`).forEach(chip=>{
+    chip.onclick = ()=>{
+      document.querySelectorAll(`.sort-chips[data-kind="${kind}"] .chip`).forEach(c=>c.classList.remove('active'));
+      chip.classList.add('active');
+      sortStateByKind[kind] = chip.dataset.sort;
+      drawEntityTable(kind);
+    };
+  });
+
+  drawEntityTable(kind);
+}
+
+function drawEntityTable(kind){
+  const q = document.getElementById(kind+'Search').value.trim().toLowerCase();
+  let entries = entityState[kind].filter(e=> e.name.toLowerCase().includes(q));
+  entries = sortEntries(entries, sortStateByKind[kind]);
+  const tbody = document.getElementById(kind+'RankBody');
+  renderRankRows(tbody, entries, kind, null);
+  document.getElementById(kind+'RowCount').textContent = `총 ${entries.length}개`;
+}
+
+const EMPLOYMENT_COLORS = {'정규직':'#3182f6','계약직':'#f59e0b','인턴직':'#10b981','파견직':'#8b5cf6','기타':'#8b95a1'};
+
+function renderEmploymentView(){
+  const entries = sortEntries(entityState.employment, 'count');
+  renderRankRows(document.getElementById('employmentRankBody'), entries, 'employment', null);
+  renderEmploymentDonut(entries);
+}
+
+function renderEmploymentDonut(entries){
+  const total = entries.reduce((sum,e)=> sum+e.latest, 0);
+  if(!total) return;
+
+  destroyChart('employmentDonut');
+  charts.employmentDonut = new Chart(document.getElementById('employmentDonutCanvas'), {
+    type:'doughnut',
+    data:{
+      labels: entries.map(e=>e.name),
+      datasets:[{
+        data: entries.map(e=>e.latest),
+        backgroundColor: entries.map(e=> EMPLOYMENT_COLORS[e.name] || '#e5e8eb'),
+        borderWidth:3, borderColor:'#ffffff'
+      }]
+    },
+    options:{ cutout:'75%', plugins:{legend:{display:false}} }
+  });
+
+  document.getElementById('employmentDonutLegend').innerHTML = entries.map(e=>{
+    const pct = (e.latest/total*100).toFixed(0);
+    const color = EMPLOYMENT_COLORS[e.name] || '#e5e8eb';
+    return `
+      <div class="donut-legend-row">
+        <span><span class="donut-dot" style="background:${color};"></span>${escapeHtml(e.name)}</span>
+        <span style="color:var(--color-text-title);">${e.latest}건 <span style="color:var(--color-text-muted); font-weight:normal;">(${pct}%)</span></span>
+      </div>
+    `;
+  }).join('');
+}
+
+function groupCounts(jobs, getKeys){
+  const counts = {};
+  jobs.forEach(j=> getKeys(j).forEach(k=>{ if(k) counts[k]=(counts[k]||0)+1; }));
+  return Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+}
+
+function podiumHtml(sortedEntries){
+  const top3 = sortedEntries.slice(0,3);
+  if(!top3.length) return '<div class="placeholder-hint">데이터 없음</div>';
+  const medal = ['🥇','🥈','🥉'];
+  const displayOrder = [1,0,2].filter(i=> top3[i]);
+  return `
+    <div class="podium">
+      ${displayOrder.map(i=>{
+        const [name, count] = top3[i];
+        return `
+          <div class="podium-item ${i===0?'first':''}">
+            <div class="podium-medal">${medal[i]}</div>
+            <div class="podium-name">${escapeHtml(name)}</div>
+            <div class="podium-count">${count}건</div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+const GROUP_ORDER = ['기획','아트(3D)','아트(2D)','개발','서버','인프라','사운드','QA','사업','인사총무','기타'];
+const GROUP_COLORS = { '기획':'#10b981', '아트(3D)':'#f59e0b', '아트(2D)':'#ec4899', '개발':'#3182f6', '서버':'#6366f1', '인프라':'#14b8a6', '사운드':'#a855f7', 'QA':'#06b6d4', '사업':'#f04452', '인사총무':'#8b95a1', '기타':'#e5e8eb' };
+const GROUP_EMOJI_MAP = { '기획':'📋', '아트(3D)':'🧊', '아트(2D)':'🎨', '개발':'💻', '서버':'🖥️', '인프라':'🌐', '사운드':'🎵', 'QA':'🧪', '사업':'📈', '인사총무':'🗂️', '기타':'🔹' };
+
+function buildCompanyGroupSeries(companyName){
+  const result = {};
+  GROUP_ORDER.forEach(g=> result[g] = []);
+  snapshots.forEach(snap=>{
+    const counts = {}; GROUP_ORDER.forEach(g=> counts[g]=0);
+    snap.jobs.forEach(j=>{
+      if(j.company_name !== companyName) return;
+      const groupsHit = new Set(jobCategories(j).map(c=> classifyBroadGroup(c)[0]));
+      groupsHit.forEach(g=>{ if(counts[g]!=null) counts[g]++; });
+    });
+    GROUP_ORDER.forEach(g=> result[g].push(counts[g]));
+  });
+  return result;
+}
+
+function selectEntity(kind, name){
+  selected[kind] = (selected[kind]===name) ? null : name;
+  renderHomeRankings();
+  if(kind==='company') drawEntityTable('company');
+  if(kind==='category') drawEntityTable('category');
+  if(kind==='employment') renderEmploymentView();
+  drawDetail(kind);
+}
+
+function drawDetail(kind){
+  const panel = document.getElementById(kind+'Detail');
+  const name = selected[kind];
+  const chartKey = kind+'Detail';
+
+  if(kind==='company'){
+    const listSection = document.getElementById('companyListSection');
+    if(!name){
+      panel.classList.remove('show');
+      listSection.style.display = 'block';
+      destroyChart(chartKey); destroyChart(chartKey+'Group');
+      return;
+    }
+    listSection.style.display = 'none';
+    panel.classList.add('show');
+    const entry = entityState.company.find(e=>e.name===name);
+    const latestSnap = snapshots[snapshots.length-1];
+    const jobsHere = latestSnap.jobs.filter(j=> KEY_FNS.company(j).includes(name));
+    drawCompanyDetail(panel, name, entry, jobsHere, chartKey);
+    return;
+  }
+
+  if(!name){ panel.classList.remove('show'); destroyChart(chartKey); destroyChart(chartKey+'Group'); return; }
+  panel.classList.add('show');
+
+  const entry = entityState[kind].find(e=>e.name===name);
+  const latestSnap = snapshots[snapshots.length-1];
+  const jobsHere = latestSnap.jobs.filter(j=> KEY_FNS[kind](j).includes(name));
+
+  let breakdownHtml = '';
+  if(kind==='category'){
+    const byComp = groupCounts(jobsHere, j=>[j.company_name]);
+    breakdownHtml = `
+      <div class="stock-section">
+        <h3>해당 직무 채용 기업 TOP 3</h3>
+        ${podiumHtml(byComp)}
+      </div>`;
+  } else if(kind==='employment'){
+    const byComp = groupCounts(jobsHere, j=>[j.company_name]).slice(0,8);
+    const byCat = groupCounts(jobsHere, jobCategories).slice(0,8);
+    breakdownHtml = `
+      <div class="grid-2 stock-section">
+        <div class="bd-block"><h4>회사별 비중</h4>
+          ${byComp.map(([n,c])=>`<div class="bd-row"><span>${escapeHtml(n)}</span><span>${c}건</span></div>`).join('') || '<div class="placeholder-hint">데이터 없음</div>'}
+        </div>
+        <div class="bd-block"><h4>직무별 비중</h4>
+          ${byCat.map(([n,c])=>`<div class="bd-row"><span>${escapeHtml(categoryLabel(n))}</span><span>${c}건</span></div>`).join('') || '<div class="placeholder-hint">데이터 없음</div>'}
+        </div>
+      </div>`;
+  }
+
+  const titleText = kind==='category' ? categoryLabel(name) : name;
+
+  panel.innerHTML = `
+    <div class="dp-head">
+      <div class="dp-title" style="display:flex;align-items:center;">${kind==='company' ? logoImgHtml(entry,40) : ''}<span>${escapeHtml(titleText)}</span></div>
+      <button class="dp-close" onclick="selectEntity('${kind}', '${name.replace(/'/g, "\\'")}')">닫기 ✕</button>
+    </div>
+    <div class="dp-count">${entry.latest}건</div>
+    <div class="dp-sub">${entry.delta!=null ? `전월대비 ${entry.delta>0?'+':''}${entry.delta}건${entry.pct!=null?` (${entry.pct>0?'+':''}${entry.pct.toFixed(0)}%)`:''}` : '이전 스냅샷 없음'}</div>
+    ${snapshots.length>1 ? `<canvas id="${chartKey}Canvas" height="60"></canvas>` : ''}
+    ${breakdownHtml}
+    <div class="detail-jobs">
+      <h4>현재 진행중인 공고 (${jobsHere.length}건)</h4>
+      ${jobsHere.slice(0,20).map(j=>`
+        <div class="dj-row">
+          <div class="dj-title">${escapeHtml(j.title)} <span style="color:var(--color-text-muted); font-weight:normal;">· ${escapeHtml(j.company_name)}</span></div>
+          <div class="dj-meta">${escapeHtml(j.deadline_raw)}</div>
+        </div>
+      `).join('') || '<div class="placeholder-hint">공고가 없어요</div>'}
+      ${jobsHere.length>20 ? `<div class="placeholder-hint">외 ${jobsHere.length-20}건의 공고가 더 있습니다</div>` : ''}
+    </div>
+  `;
+
+  if(snapshots.length>1){
+    destroyChart(chartKey);
+    charts[chartKey] = new Chart(document.getElementById(chartKey+'Canvas'), {
+      type:'line',
+      data:{ labels: snapshots.map(s=>s.date), datasets:[{
+        data: entry.series, borderColor:'#3182f6', backgroundColor:'rgba(49,130,246,0.08)',
+        fill:true, tension:0.4, pointRadius:4, pointBackgroundColor:'#3182f6', borderWidth: 3
+      }]},
+      options:{ plugins:{legend:{display:false}},
+        scales:{ x:{ticks:{color:'#8b95a1', font:{weight:'bold'}},grid:{display:false}}, y:{ticks:{color:'#8b95a1', font:{weight:'bold'}},grid:{color:'#f2f4f6'},beginAtZero:true} } }
+    });
+  }
+}
+
+function companyKeyInfoGrid(entry){
+  const items = [
+    ['진행 중인 공고 수', entry.latest + '건'],
+    ['전월 대비 증감', entry.delta!=null ? `${entry.delta>0?'+':''}${entry.delta}건${entry.pct!=null?` (${entry.pct>0?'+':''}${entry.pct.toFixed(0)}%)`:''}` : '—'],
+    ['대표자', entry.ceo],
+    ['설립연도', entry.foundedYear],
+  ].filter(([, v]) => v);
+
+  if(entry.flagshipGames) items.push(['대표게임', entry.flagshipGames]);
+
+  if(!items.length) return '';
+
+  return `
+    <div class="info-grid">
+      ${items.map(([label, val])=>`
+        <div class="info-item${label==='대표게임' ? ' info-item-wide' : ''}">
+          <div class="info-label">${escapeHtml(label)}</div>
+          <div class="info-value">${escapeHtml(val)}</div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function drawCompanyDetail(panel, name, entry, jobsHere, chartKey){
+  const byCat = groupCounts(jobsHere, jobCategories).slice(0,10);
+  const hasHistory = snapshots.length>1;
+
+  panel.innerHTML = `
+    <div class="dp-head">
+      <button class="dp-back" onclick="selectEntity('company', '${name.replace(/'/g, "\\'")}')">← 기업 목록으로</button>
+      ${entry.homepage ? `<a class="dp-homepage-btn" href="${escapeHtml(entry.homepage)}" target="_blank" rel="noopener">홈페이지 방문 ↗</a>` : ''}
+    </div>
+    <div class="dp-head" style="margin-top:10px;">
+      <div class="dp-title" style="display:flex;align-items:center;">${logoImgHtml(entry,48)}<span>${escapeHtml(name)}</span></div>
+    </div>
+
+    ${companyKeyInfoGrid(entry)}
+
+    <div class="stock-section">
+      <h3>직무별 채용 비중</h3>
+      ${!jobsHere.length ? '<div class="placeholder-hint">현재 등록된 공고가 없습니다</div>' : `
+      <div class="donut-section">
+        <div class="donut-canvas-wrap"><canvas id="${chartKey}DonutCanvas"></canvas></div>
+        <div class="donut-legend" id="${chartKey}DonutLegend"></div>
+      </div>
+      `}
+    </div>
+
+    <div class="stock-section">
+      <h3>세부 직군별 채용 현황</h3>
+      <div class="bd-block" style="background:var(--color-bg-surface); padding: 24px; border-radius: var(--radius-md);">
+        ${byCat.map(([n,c])=>`<div class="bd-row"><span>${escapeHtml(categoryLabel(n))}</span><span style="color:var(--color-text-title);">${c}건</span></div>`).join('') || '<div class="placeholder-hint">데이터 없음</div>'}
+      </div>
+    </div>
+
+    <div class="stock-section">
+      <h3>채용 규모 추이</h3>
+      ${hasHistory ? `
+        <div style="background:var(--color-bg-surface); padding: 24px; border-radius: var(--radius-md); margin-bottom: 24px;">
+          <div class="chart-subtitle">전체 채용 공고 수</div>
+          <canvas id="${chartKey}Canvas" height="80"></canvas>
+        </div>
+        <div style="background:var(--color-bg-surface); padding: 24px; border-radius: var(--radius-md);">
+          <div class="chart-subtitle">직군별 채용 추이</div>
+          <canvas id="${chartKey}GroupCanvas" height="100"></canvas>
+        </div>
+      ` : '<div class="placeholder-hint">2개월 이상의 스냅샷이 누적되면 그래프가 표시됩니다</div>'}
+    </div>
+
+    <div class="stock-section">
+      <h3>현재 진행중인 채용 공고 (${jobsHere.length}건)</h3>
+      <div class="detail-jobs" style="background:var(--color-bg-surface); padding: 12px 24px 24px; border-radius: var(--radius-md);">
+        ${jobsHere.slice(0,30).map(j=>`
+          <div class="dj-row">
+            <div class="dj-title">${escapeHtml(j.title)}</div>
+            <div class="dj-meta">${escapeHtml(j.deadline_raw)}</div>
+          </div>
+        `).join('') || '<div class="placeholder-hint">공고가 없어요</div>'}
+        ${jobsHere.length>30 ? `<div class="placeholder-hint">외 ${jobsHere.length-30}건의 공고가 더 있습니다</div>` : ''}
+      </div>
+    </div>
+  `;
+
+  destroyChart(chartKey);
+  destroyChart(chartKey+'Group');
+  destroyChart(chartKey+'Donut');
+
+  if(jobsHere.length){
+    const donutCounts = {}; GROUP_ORDER.forEach(g=> donutCounts[g]=0);
+    jobsHere.forEach(j=>{
+      const cats = jobCategories(j);
+      const primary = cats.length ? cats[0] : '기타/미분류';
+      const [group] = classifyBroadGroup(primary);
+      donutCounts[group] = (donutCounts[group]||0)+1;
+    });
+    const activeGroups = GROUP_ORDER.filter(g=> donutCounts[g]>0);
+    const total = jobsHere.length;
+
+    charts[chartKey+'Donut'] = new Chart(document.getElementById(chartKey+'DonutCanvas'), {
+      type:'doughnut',
+      data:{
+        labels: activeGroups.map(g=>`${GROUP_EMOJI_MAP[g]} ${g}`),
+        datasets:[{
+          data: activeGroups.map(g=>donutCounts[g]),
+          backgroundColor: activeGroups.map(g=>GROUP_COLORS[g]),
+          borderWidth:3, borderColor:'#ffffff'
+        }]
+      },
+      options:{ cutout:'75%', plugins:{legend:{display:false}} }
+    });
+
+    document.getElementById(chartKey+'DonutLegend').innerHTML = activeGroups.map(g=>{
+      const pct = (donutCounts[g]/total*100).toFixed(0);
+      return `
+        <div class="donut-legend-row">
+          <span><span class="donut-dot" style="background:${GROUP_COLORS[g]};"></span>${GROUP_EMOJI_MAP[g]} ${g}</span>
+          <span style="color:var(--color-text-title);">${donutCounts[g]}건 <span style="color:var(--color-text-muted); font-weight:normal;">(${pct}%)</span></span>
+        </div>
+      `;
+    }).join('');
+  }
+
+  if(hasHistory){
+    charts[chartKey] = new Chart(document.getElementById(chartKey+'Canvas'), {
+      type:'line',
+      data:{ labels: snapshots.map(s=>s.date), datasets:[{
+        data: entry.series, borderColor:'#3182f6', backgroundColor:'rgba(49,130,246,0.08)',
+        fill:true, tension:0.4, pointRadius:4, pointBackgroundColor:'#3182f6', borderWidth:3
+      }]},
+      options:{ plugins:{legend:{display:false}},
+        scales:{ x:{ticks:{color:'#8b95a1', font:{weight:'bold'}},grid:{display:false}}, y:{ticks:{color:'#8b95a1', font:{weight:'bold'}},grid:{color:'#e5e8eb'},beginAtZero:true} } }
+    });
+
+    const groupSeries = buildCompanyGroupSeries(name);
+    charts[chartKey+'Group'] = new Chart(document.getElementById(chartKey+'GroupCanvas'), {
+      type:'line',
+      data:{
+        labels: snapshots.map(s=>s.date),
+        datasets: GROUP_ORDER.map(g=>({
+          label: `${GROUP_EMOJI_MAP[g]} ${g}`,
+          data: groupSeries[g],
+          borderColor: GROUP_COLORS[g],
+          backgroundColor: GROUP_COLORS[g],
+          tension:0.4, pointRadius:2, borderWidth:2
+        }))
+      },
+      options:{
+        plugins:{legend:{position:'bottom', labels:{color:'#191f28', boxWidth:12, font:{size:13, weight:'600'}}}},
+        scales:{
+          x:{ticks:{color:'#8b95a1', font:{weight:'bold'}},grid:{display:false}},
+          y:{ticks:{color:'#8b95a1', font:{weight:'bold'}, stepSize:1},grid:{color:'#e5e8eb'},beginAtZero:true}
+        }
+      }
+    });
+  }
+}
+</script>
+</body>
+</html>
