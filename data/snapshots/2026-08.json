@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "period": "2026-08",
+  "collected_at": "2026-08-01T09:05:00+09:00",
+  "is_sample": true,
+  "jobs": [
+    {
+      "id": "sample-001",
+      "company": "네오아크",
+      "title": "신작 RPG 서버 프로그래머",
+      "url": "https://example.com/jobs/sample-001",
+      "categories": [
+        "게임제작"
+      ],
+      "original_categories": [
+        "서버"
+      ],
+      "career": "경력 3~7년",
+      "employment_type": "정규직",
+      "location": "서울",
+      "posted_at": "2026-07-25",
+      "deadline": "2026-09-30",
+      "always_open": false,
+      "logo_url": null,
+      "representative_game": "Project Aurora",
+      "collected_at": "2026-08-01T09:05:00+09:00",
+      "job_subcategories": [
+        "서버"
+      ],
+      "job_major_categories": [
+        "게임제작"
+      ]
+    }
+  ]
+}

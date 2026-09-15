@@ -1,0 +1,8 @@
+# Change approved to true only after reviewing the source's current terms.
+sources:
+  게임잡:
+    approved: true
+    note: "2026-09-14 사용자 확인: 유료 기업회원으로서 공개 대시보드 수집·가공 사용 허가 확보"
+  게임잡 업계뉴스:
+    approved: true
+    note: "월간 리포트 근거용으로 제목·짧은 요약·게시일·원문 링크만 수집"
