@@ -1,35 +1,70 @@
-{
+import json
+import re
+import pandas as pd
+
+# CSV 파일 로드
+df = pd.read_csv('2026-08-01.csv')
+
+# 마감일 파싱 함수
+def parse_deadline(raw):
+    if pd.isna(raw) or raw == '채용시':
+        return None, True
+    raw_str = str(raw).strip()
+    if raw_str == '마감':
+        return '마감', False
+    
+    # ~MM/DD 형태 변환
+    m1 = re.match(r'^~(\d{2})/(\d{2})$', raw_str)
+    if m1:
+        month, day = m1.groups()
+        return f"2026-{month}-{day}", False
+        
+    # MM/DD(요일) 형태 변환
+    m2 = re.match(r'^(\d{2})/(\d{2})\(.\)$', raw_str)
+    if m2:
+        month, day = m2.groups()
+        return f"2026-{month}-{day}", False
+        
+    return raw_str, False
+
+jobs_list = []
+for _, row in df.iterrows():
+    deadline, always_open = parse_deadline(row['deadline_raw'])
+    
+    # 직무 카테고리 세미콜론(;) 분할
+    categories = [c.strip() for c in str(row['job_categories']).split(';') if c.strip()] if pd.notna(row['job_categories']) else []
+    job_func = str(row['job_function']).strip() if pd.notna(row['job_function']) else None
+    
+    job_item = {
+        "id": str(row['gi_no']),
+        "company": str(row['company_name']).strip(),
+        "title": str(row['title']).strip(),
+        "url": f"https://www.gamejob.co.kr/List_GI/GIR_Read.asp?GI_No={row['gi_no']}",
+        "categories": categories,
+        "original_categories": categories,
+        "career": str(row['career']).strip() if pd.notna(row['career']) else "",
+        "employment_type": str(row['employment_type']).strip() if pd.notna(row['employment_type']) else "",
+        "location": None,
+        "posted_at": None,
+        "deadline": deadline,
+        "always_open": always_open,
+        "logo_url": None,
+        "representative_game": None,
+        "collected_at": "2026-08-01T09:05:00+09:00",
+        "job_subcategories": categories,
+        "job_major_categories": [job_func] if job_func else []
+    }
+    jobs_list.append(job_item)
+
+# JSON 데이터 구조화
+final_json = {
   "schema_version": 1,
   "period": "2026-08",
   "collected_at": "2026-08-01T09:05:00+09:00",
-  "is_sample": true,
-  "jobs": [
-    {
-      "id": "sample-001",
-      "company": "네오아크",
-      "title": "신작 RPG 서버 프로그래머",
-      "url": "https://example.com/jobs/sample-001",
-      "categories": [
-        "게임제작"
-      ],
-      "original_categories": [
-        "서버"
-      ],
-      "career": "경력 3~7년",
-      "employment_type": "정규직",
-      "location": "서울",
-      "posted_at": "2026-07-25",
-      "deadline": "2026-09-30",
-      "always_open": false,
-      "logo_url": null,
-      "representative_game": "Project Aurora",
-      "collected_at": "2026-08-01T09:05:00+09:00",
-      "job_subcategories": [
-        "서버"
-      ],
-      "job_major_categories": [
-        "게임제작"
-      ]
-    }
-  ]
+  "is_sample": False,
+  "jobs": jobs_list
 }
+
+# 저장
+with open('2026-08-01.json', 'w', encoding='utf-8') as f:
+    json.dump(final_json, f, ensure_ascii=False, indent=2)
