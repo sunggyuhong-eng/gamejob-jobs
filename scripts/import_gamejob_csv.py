@@ -141,7 +141,7 @@ def main() -> None:
         "statistics": stats,
         "job_examples": [
             {key: job.get(key) for key in ("id", "company", "title", "url", "categories", "job_subcategories", "career", "location", "employment_type")}
-            for job in current_jobs[:50]
+            for job in current_jobs
         ],
     })
     report["methodology"] = build_methodology(report)

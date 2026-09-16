@@ -1,18 +1,18 @@
 {
   "is_sample": false,
-  "granularity": "daily",
+  "granularity": "monthly",
   "months": [
     {
-      "month": "2026-09-02",
-      "total_open": 1589,
+      "month": "2026-08",
+      "total_open": 1497,
       "new_count": null,
       "closed_count": null
     },
     {
-      "month": "2026-09-15",
-      "total_open": 1551,
-      "new_count": 310,
-      "closed_count": 348
+      "month": "2026-09",
+      "total_open": 1554,
+      "new_count": 493,
+      "closed_count": 436
     }
   ]
 }

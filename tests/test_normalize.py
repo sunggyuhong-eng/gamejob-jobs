@@ -1,8 +1,13 @@
-from collector.normalize import canonical_url, career_bucket, normalize_categories, normalize_company, normalize_date, split_job_categories, stable_id
+from collector.normalize import canonical_url, career_bucket, normalize_categories, normalize_company, normalize_date, split_job_categories, split_multi_value, stable_id
 
 
 def test_job_can_have_multiple_categories():
     assert normalize_categories("게임개발(클라이언트)", "QA·테스터") == ["게임제작", "게임운영·QA"]
+
+
+def test_legacy_major_field_containing_subcategory_maps_to_real_major():
+    assert normalize_categories("게임기획") == ["게임제작"]
+    assert normalize_categories("전략기획") == ["사업기획"]
 
 
 def test_source_subcategories_are_preserved():
@@ -15,6 +20,12 @@ def test_unknown_job_is_other():
 
 def test_company_alias():
     assert normalize_company("(주)넥슨코리아") == "넥슨코리아"
+    assert normalize_company("㈜콩스튜디오코리아") == "콩스튜디오코리아"
+    assert normalize_company("(주)크래프톤") == normalize_company("크래프톤")
+
+
+def test_multi_values_are_split():
+    assert split_multi_value("정규직, 계약직") == ["정규직", "계약직"]
 
 
 def test_date_and_url_normalization():

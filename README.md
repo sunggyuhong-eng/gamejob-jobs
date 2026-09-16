@@ -4,16 +4,16 @@
 
 화면은 토스 스타일의 넓은 여백, `#3182F6` 포인트 컬러, 밝은 회색 섹션, 둥근 카드와 큰 수치 중심의 반응형 디자인 시스템을 사용합니다. PC에서는 데이터 비교에 집중하고 모바일에서는 공고를 카드 형태로 읽을 수 있도록 자동 전환됩니다.
 
-> 현재 ZIP에는 2026-09-02 실제 CSV **1,589건**과 2026-09-15 실제 수집 데이터 **1,551건**이 포함되어 있습니다. 두 기준일의 공고 고유번호를 비교한 변화(신규 310건·유지 1,241건·종료 348건)를 화면에서 시험할 수 있습니다. 이후 Actions가 최신 데이터로 갱신하며, 수집기가 접근 제한을 만나면 기존 정상 데이터는 유지하고 수치를 만들지 않습니다.
+> 현재 ZIP은 사용자가 제공한 월간 JSON 두 개를 공식 비교 기준으로 사용합니다. 2026-08은 **1,497건**, 2026-09는 **1,554건**이며 신규 493건·유지 1,061건·종료 436건으로 계산됩니다.
 
 ## 작동 구조
 
 1. 매일 오전 9시(한국 시간) 공개 채용공고를 수집해 `data/daily/YYYY-MM-DD.json`에 보존합니다.
 2. 매월 1일 오전 9시에는 `data/snapshots/YYYY-MM.json`을 만들고 전월과 비교합니다.
-3. Anthropic Claude API가 제공된 경우에만 `reports/YYYY-MM.md`와 `data/reports/YYYY-MM.json`을 생성합니다.
+3. 사용자가 `Generate GPT Report - OpenAI`를 수동 실행한 경우에만 전체 공고·전체 뉴스 입력으로 `reports/YYYY-MM.md`와 `data/reports/YYYY-MM.json`을 생성하고 GitHub Pages까지 다시 배포합니다.
 4. React는 저장소의 정적 JSON만 읽습니다. 외부 사이트를 브라우저에서 직접 호출하지 않습니다.
 5. 수집 성공 여부와 오류는 `data/collection-status.json`에 기록합니다.
-6. 직무별 화면은 `data/category-history.json`을 사용해 선택한 대분류 또는 소분류만 날짜별로 비교합니다.
+6. 직무별 화면은 `data/category-history.json`을 사용해 선택한 대분류 또는 소분류를 공식 월간 스냅샷별로 비교합니다.
 7. 매일 수집할 때도 `data/company-profiles.json`의 기존 로고·대표게임을 최신 공고에 재적용하며, 일부 상세 조회가 실패해도 기존 값을 지우지 않습니다.
 
 ## 폴더 구조
@@ -26,7 +26,7 @@ game-industry-hiring-tracker/
 │  ├─ adapters/              ← 사이트별 수집 코드
 │  ├─ normalize.py           ← 회사·직무·날짜 정규화
 │  ├─ pipeline.py            ← 저장·중복 제거·전월 비교
-│  ├─ report.py              ← Claude 월간 리포트 생성
+│  ├─ report.py              ← GPT 월간 리포트 생성
 │  └─ validate.py            ← 데이터 검증
 ├─ config/                   ← 수정 가능한 분류 규칙
 ├─ data/                     ← JSON 데이터가 들어 있는 폴더
@@ -38,6 +38,7 @@ game-industry-hiring-tracker/
 ├─ scripts/
 │  ├─ run_pipeline.py
 │  └─ import_gamejob_csv.py  ← 허가받아 받은 CSV 변환
+│  └─ apply_monthly_snapshot_pair.py ← 월간 JSON 두 개로 비교 데이터 재생성
 ├─ src/                      ← React 화면
 ├─ tests/                    ← Python 테스트
 ├─ package.json
@@ -76,7 +77,7 @@ game-industry-hiring-tracker/
 
 수집 워크플로가 JSON과 리포트를 저장소에 커밋하기 위해 필요합니다.
 
-### Claude API 키
+### OpenAI API 키
 
 AI 리포트만 사용하도록 설계되어 있으므로 키가 없으면 월간 리포트는 생성되지 않습니다.
 
@@ -84,14 +85,16 @@ API 키는 공개 웹페이지에 입력하지 않습니다. 브라우저 입력
 
 1. 저장소 `Settings` → `Secrets and variables` → `Actions`로 이동합니다.
 2. `New repository secret`을 누릅니다.
-3. 이름은 반드시 `ANTHROPIC_API_KEY`, 값은 Anthropic Console에서 새로 발급받은 키를 입력합니다.
-4. 선택 사항으로 `Variables` 탭에 `ANTHROPIC_MODEL`을 추가할 수 있습니다. 기본값은 `claude-sonnet-5`입니다.
+3. 이름은 반드시 `OPENAI_API_KEY`, 값은 OpenAI Platform에서 새로 발급받은 키를 입력합니다.
+4. 선택 사항으로 `Variables` 탭에 `OPENAI_MODEL`을 추가할 수 있습니다. 기본값은 `gpt-5.5`입니다.
 
-키를 코드, JSON, README 또는 채팅에 입력하지 마세요. 공개된 키는 즉시 폐기하고 새 키로 교체해야 합니다. API 사용료와 사용 가능 모델은 Anthropic 계정 설정에 따라 달라집니다.
+키를 코드, JSON, README 또는 채팅에 입력하지 마세요. 공개된 키는 즉시 폐기하고 새 키로 교체해야 합니다. API 사용료와 사용 가능 모델은 OpenAI 계정 설정에 따라 달라집니다. 키가 없거나 잘못된 경우 리포트 Actions는 빨간불로 실패합니다.
+
+AI 리포트는 자동 수집에서 생성하지 않습니다. 현재 저장된 스냅샷으로 리포트를 만들고 싶을 때만 `Actions` → `Generate GPT Report - OpenAI` → `Run workflow`를 실행하세요. 별도 체크박스는 없으며, 이 수동 워크플로를 실행할 때만 GPT API 토큰을 사용합니다. 게임잡 데이터는 다시 수집하지 않으며, 완료 시 생성 결과를 커밋하고 GitHub Pages에 직접 배포합니다.
 
 ### 수집 출처 승인
 
-수집처는 `config/source_policy.yml`에서 관리합니다. 게임잡은 2026-09-14 사용자가 사용 허가를 확보했다고 확인하여 활성화되어 있습니다. 업계 뉴스는 화면에 표시하지 않고, 게임잡 업계뉴스에서 최대 최근 45일·80페이지 범위의 공개 기사 메타데이터를 월간 리포트 근거로만 수집합니다.
+수집처는 `config/source_policy.yml`에서 관리합니다. 게임잡은 2026-09-14 사용자가 사용 허가를 확보했다고 확인하여 활성화되어 있습니다. 업계 뉴스는 게임잡 업계뉴스에서 최대 최근 45일·80페이지 범위의 공개 기사 메타데이터를 월간 리포트 근거로 수집하고, 뉴스가 있을 때 리포트 화면에도 원문 링크와 함께 표시합니다.
 
 ### GitHub Pages 활성화
 
@@ -106,7 +109,7 @@ Vite의 `base: './'`과 HashRouter를 사용하므로 `사용자명.github.io/�
 
 | 워크플로 | 한국 시간 | UTC cron | 역할 |
 |---|---:|---:|---|
-| Monthly Collection and AI Report | 매월 1일 09:00 | `0 0 1 * *` | 공식 스냅샷, 비교, AI 리포트 |
+| Monthly Collection | 매월 1일 09:00 | `0 0 1 * *` | 공식 스냅샷과 비교 데이터 생성 |
 | Daily Collection | 매일 09:00 | `0 0 * * *` | 일별 스냅샷 (매월 1일은 자동 건너뜀) |
 | Test and Validate | `main` 변경 시 | 해당 없음 | Python 테스트와 React 빌드 |
 | Deploy GitHub Pages | 변경·수집 완료 시 | 해당 없음 | Pages 배포 |
@@ -118,7 +121,7 @@ GitHub 예약 작업은 부하에 따라 다소 늦게 시작될 수 있습니�
 1. GitHub 저장소 `Actions`를 엽니다.
 2. 왼쪽에서 `Manual Collection`을 선택합니다.
 3. `Run workflow`를 누릅니다.
-4. `daily`는 오늘 기록만 저장하고, `monthly`는 공식 월간 비교와 AI 리포트까지 만듭니다.
+4. `daily`는 오늘 기록만 저장하고, `monthly`는 공식 월간 비교 데이터까지 만듭니다. GPT 해설은 별도 수동 워크플로에서 생성합니다.
 5. 같은 날짜·월의 기존 파일을 교체할 때만 `force`를 체크합니다.
 
 기본 정책은 기존 스냅샷 보존입니다. 같은 날 또는 같은 달에 다시 실행하면 건너뛰며, `force=true`로 실행한 경우에만 교체합니다. 교체 전 파일이 중요하다면 먼저 GitHub 커밋 기록에서 내려받으세요.
@@ -129,7 +132,7 @@ GitHub 예약 작업은 부하에 따라 다소 늦게 시작될 수 있습니�
 - `data/collection-status.json`에는 사이트별 `success`/`failed`, 수집 건수, 오류 이유가 기록됩니다.
 - `data/latest.json`의 `collected_at`이 마지막 정상 수집 시각입니다.
 - 채용공고가 0건이면 새 `latest.json`을 저장하지 않아 기존 정상 화면을 보호합니다.
-- `ANTHROPIC_API_KEY`가 없으면 `pending_api_key` 상태만 기록하며 대체 문장을 만들지 않습니다.
+- `OPENAI_API_KEY`가 없으면 `pending_api_key` 상태만 기록하며 대체 문장을 만들지 않습니다.
 - 게임잡처럼 사용 허가가 기록된 도메인은 `robots.txt` 연결을 3회 재시도합니다. 그래도 네트워크로 확인할 수 없을 때만 `ROBOTS_UNAVAILABLE_ALLOWED_HOSTS`의 승인 도메인 정책을 사용하며, 정상 응답에서 `Disallow`가 확인되면 수집을 중단합니다.
 
 상세 대응표는 [운영 및 오류 대응 안내서](docs/OPERATIONS.md)를 참고하세요.
@@ -173,7 +176,7 @@ npm run preview
 
 ```bash
 python scripts/run_pipeline.py --mode daily
-ANTHROPIC_API_KEY=... python scripts/run_pipeline.py --mode monthly
+OPENAI_API_KEY=... python scripts/generate_existing_report.py
 ```
 
 ## 데이터 판정 기준
@@ -187,6 +190,9 @@ ANTHROPIC_API_KEY=... python scripts/run_pipeline.py --mode monthly
 - 월중 열리고 닫힌 공고는 일별 스냅샷에서만 확인할 수 있습니다.
 - 직무는 공고 제목의 단어로 추측하지 않습니다. 게임잡 원문 직무를 `job_subcategories`에 보존하고 `config/job_categories.yml`을 통해 `job_major_categories`에 연결합니다.
 - 예를 들어 `게임제작`을 누르면 `게임개발(클라이언트)`, `게임개발(모바일)`, `게임AI 개발` 같은 실제 소분류를 다시 선택할 수 있습니다.
+- 대분류 수는 해당 직무를 가진 고유 공고 수입니다. 한 공고가 여러 소분류 태그를 가질 수 있으므로 소분류 수나 증감의 합은 대분류 수·증감과 같지 않을 수 있습니다.
+- 회사명 앞뒤의 `(주)`, `㈜`, `주식회사` 표기는 제거해 같은 회사를 하나로 집계합니다. 계열사는 별도 회사로 유지합니다.
+- 복수 고용형태는 `정규직, 계약직`이라는 별도 항목으로 두지 않고 정규직과 계약직에 각각 포함합니다.
 
 ### 게임잡 CSV를 기준일 데이터로 가져오기
 
@@ -198,6 +204,16 @@ python scripts/import_gamejob_csv.py "CSV파일경로.csv" --period 2026-09-02
 
 변환 결과는 `data/daily/2026-09-02.json`에 저장되고, `data/comparisons/2026-09-02_to_현재기준일.json`에 신규·유지·종료 비교가 저장됩니다. 기존 월간 공식 스냅샷은 삭제하거나 덮어쓰지 않습니다.
 
+### 월간 JSON 두 개를 비교 기준으로 교체하기
+
+다음 명령은 기존 월간 스냅샷과 일별 비교 데이터를 정리하고 지정한 두 JSON만으로 화면 데이터를 다시 만듭니다.
+
+```bash
+python scripts/apply_monthly_snapshot_pair.py "이전월.json" "현재월.json"
+```
+
+현재 제공본에는 `2026-08.json → 2026-09.json` 비교 결과가 이미 적용되어 있으므로 다시 실행할 필요가 없습니다.
+
 ## 월간 리포트 작성 기준
 
 월간 리포트는 매월 1일의 공식 스냅샷과 직전 달 공식 스냅샷을 비교한 집계값으로 작성합니다.
@@ -208,14 +224,14 @@ python scripts/import_gamejob_csv.py "CSV파일경로.csv" --period 2026-09-02
 - 회사와 직무의 교차 변화
 - 경력 구간, 근무 지역, 고용 형태별 변화
 - 다음 달에 추가 관찰할 회사와 직무
-- 대표 공고 최대 50건의 회사명·제목·분류·원문 링크
-- 최근 45일 게임잡 업계뉴스의 제목·짧은 요약·게시일·원문 링크
+- 전체 공고의 회사명·제목·분류·원문 링크
+- 수집된 전체 게임잡 업계뉴스의 제목·짧은 요약·게시일·원문 링크
 - 신작 출시, 프로젝트 중단, 서비스 종료, 투자·인수합병, 실적, 구조조정, 조직개편 등과 회사별 채용 변동의 시점·회사 일치 여부
 - 이전 정상 월간 데이터가 없으면 증감 수치를 만들지 않고 `기준 데이터 없음`으로 표시
 
-Claude는 위에서 계산된 통계, 대표 공고, 뉴스 근거를 함께 검토합니다. 기사에 채용 확대·축소가 직접 명시된 경우와 단순히 같은 시기에 발생한 경우를 구분하고, 인과관계가 확인되지 않으면 `관련 가능성이 있다` 또는 `추가 확인이 필요하다`고 작성합니다. 원본에 없는 수치나 원인을 만들어내지 않도록 지시되어 있으며, API 키가 없으면 리포트를 임의 생성하지 않고 `pending_api_key` 상태로 남깁니다.
+GPT는 위에서 계산된 전체 통계, 전체 공고, 전체 뉴스 근거를 함께 검토합니다. 기사에 채용 확대·축소가 직접 명시된 경우와 단순히 같은 시기에 발생한 경우를 구분하고, 인과관계가 확인되지 않으면 `관련 가능성` 또는 `근거 부족`으로 분류합니다. 응답은 JSON Schema로 고정하며, 공고·뉴스 링크는 GPT 문장이 아니라 저장된 원본 데이터에서 연결합니다. 원본에 없는 수치나 원인을 만들어내지 않도록 지시되어 있으며, API 키가 없으면 리포트를 만들지 않고 Actions를 실패 처리합니다.
 
-웹의 월간 리포트 화면에는 비교 기준일, 전달한 공고·뉴스 근거 수, 뉴스 기간, 판단 규칙, Claude에 전달되는 전체 시스템 프롬프트를 함께 표시합니다. 운영자가 프롬프트를 바꾸려면 `config/report_prompt.md`만 수정하면 됩니다.
+웹의 월간 리포트 화면에는 KPI, 직무·회사·경력·고용형태 그래프, 짧은 시장 해설, 회사별 원문 공고·뉴스, Watchlist와 비교 기준을 표시합니다. 비어 있는 이전 값은 `비교 데이터 없음`으로 표시하고 개발자 표현인 `null`은 노출하지 않습니다. 운영자가 분석 지침을 바꾸려면 `config/report_prompt.md`를 수정하면 됩니다.
 
 ## 수집 정책과 법적 주의
 

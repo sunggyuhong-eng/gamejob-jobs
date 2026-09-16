@@ -20,7 +20,17 @@ def load_yaml(name: str) -> dict:
 def normalize_company(name: str | None) -> str:
     value = re.sub(r"\s+", " ", (name or "").strip())
     aliases = load_yaml("company_aliases.yml").get("aliases", {})
+    value = aliases.get(value, value)
+    # 법인 표기 차이로 같은 회사가 증감 상·하위에 동시에 잡히지 않도록 한다.
+    value = re.sub(r"^(?:\(주\)|㈜|주식회사)\s*", "", value)
+    value = re.sub(r"\s*(?:\(주\)|㈜)$", "", value)
+    value = re.sub(r"\s+", " ", value).strip()
     return aliases.get(value, value or "회사명 미확인")
+
+
+def split_multi_value(value: str | None) -> list[str]:
+    """쉼표로 함께 표기된 고용형태 등을 개별 값으로 정규화한다."""
+    return split_job_categories(value)
 
 
 def split_job_categories(*values: str | None) -> list[str]:
