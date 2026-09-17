@@ -213,7 +213,7 @@ def build_report_pdf(report: dict, output_path: Path) -> Path:
 
     story += [Spacer(1, 17*mm), Paragraph("MONTHLY GAME HIRING RESEARCH", s["cover_kicker"]), Paragraph(f"{str(report.get('period','')).replace('-', '년 ')}월<br/>게임업계 채용 리포트", s["cover_title"]), Paragraph(markup(comparison + " 공개 채용공고 비교"), s["cover_sub"]), Spacer(1, 12*mm)]
     outlook = clean(analysis.get("outlook") or ("게임업계 공개 채용공고는 전월 대비 " + ("증가했습니다." if (stats.get("change") or 0) >= 0 else "감소했습니다.")), 180)
-    callout = Table([[Paragraph("ANALYST VIEW", s["cover_kicker"]), Paragraph(markup(outlook), s["callout"])]], colWidths=[31*mm, 131*mm])
+    callout = Table([[Paragraph("이번 달의 결론", s["cover_kicker"]), Paragraph(markup(outlook), s["callout"])]], colWidths=[31*mm, 131*mm])
     callout.setStyle(TableStyle([("BACKGROUND", (0,0), (-1,-1), BLUE_SOFT), ("BOX", (0,0), (-1,-1), .7, colors.HexColor("#CBE2FF")), ("VALIGN", (0,0), (-1,-1), "MIDDLE"), ("LEFTPADDING", (0,0), (-1,-1), 4*mm), ("RIGHTPADDING", (0,0), (-1,-1), 4*mm), ("TOPPADDING", (0,0), (-1,-1), 4*mm), ("BOTTOMPADDING", (0,0), (-1,-1), 4*mm)]))
     story += [callout, Spacer(1, 9*mm), kpi_table(stats, s), Spacer(1, 9*mm), Paragraph("핵심 포인트", s["h2"])]
     highlights = analysis.get("highlights") or [f"전체 공고는 {int(stats.get('previous_total') or 0):,}건에서 {int(stats.get('total_open') or 0):,}건으로 {fmt_change(stats.get('change'))} 변했습니다.", f"신규 {int(stats.get('new_count') or 0):,}건, 유지 {int(stats.get('maintained_count') or 0):,}건, 종료 {int(stats.get('closed_count') or 0):,}건입니다."]

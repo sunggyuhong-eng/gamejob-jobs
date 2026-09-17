@@ -275,7 +275,7 @@ def build_methodology(payload: dict, analysis_input: dict | None = None) -> dict
     selected_news = analysis_input.get("news") or []
     dates = sorted(x.get("published_at") for x in selected_news if x.get("published_at"))
     return {
-        "prompt_version": "2026-09-16-structured-brief-v3",
+        "prompt_version": "2026-09-17-structured-brief-v4",
         "system_prompt": SYSTEM,
         "evidence": {
             "baseline_period": payload.get("baseline_period"),

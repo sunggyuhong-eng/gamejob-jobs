@@ -12,8 +12,7 @@ import type { CategoryHistory, CompanyGroups, History, Job, Report, Snapshot, St
 
 type Data = { snapshot: Snapshot; history: History; categoryHistory: CategoryHistory; report: Report; status: Status; companyGroups:CompanyGroups; snapshots:Record<string,Snapshot> }
 const nav = [
-  ['/', '대시보드', LayoutDashboard], ['/jobs', '채용공고', BriefcaseBusiness],
-  ['/categories', '직무별', BarChart3], ['/companies', '회사별', Building2],
+  ['/', '대시보드', LayoutDashboard], ['/categories', '직무별', BarChart3], ['/companies', '회사별', Building2],
   ['/reports', '월간 리포트', FileText], ['/quality', '데이터 진단', ShieldCheck],
 ] as const
 
@@ -109,7 +108,8 @@ function Dashboard({ data }: { data: Data }) {
 function Jobs({ data }: { data: Data }) {
   const jobs = data.snapshot.jobs
   const [params] = useSearchParams()
-  const [q, setQ] = useState(params.get('q') || ''), [company, setCompany] = useState('')
+  const queryParam = params.get('q') || ''
+  const [q, setQ] = useState(queryParam), [company, setCompany] = useState('')
   const [major, setMajor] = useState(params.get('major') || ''), [sub, setSub] = useState(params.get('sub') || '')
   const [career, setCareer] = useState(''), [location, setLocation] = useState(''), [employment, setEmployment] = useState('')
   const [sort, setSort] = useState('latest'), [page, setPage] = useState(1)
@@ -123,6 +123,7 @@ function Jobs({ data }: { data: Data }) {
     : (b.posted_at || '').localeCompare(a.posted_at || '')), [jobs, q, company, major, sub, career, location, employment, sort])
 
   useEffect(() => setPage(1), [q, company, major, sub, career, location, employment, sort])
+  useEffect(() => setQ(queryParam), [queryParam])
   useEffect(() => { if (sub && !jobs.some(j => (!major || majorCategories(j).includes(major)) && subCategories(j).includes(sub))) setSub('') }, [jobs, major, sub])
   const clear = () => { setQ(''); setCompany(''); setMajor(''); setSub(''); setCareer(''); setLocation(''); setEmployment('') }
   const hasFilter = Boolean(q || company || major || sub || career || location || employment)
@@ -142,46 +143,59 @@ function Categories({ data }: { data: Data }) {
   const periods = Object.keys(data.snapshots).sort()
   const [baseline, setBaseline] = useState(periods.at(-2) || periods[0] || '')
   const [current, setCurrent] = useState(periods.at(-1) || data.snapshot.period.slice(0, 7))
+  const [countMode, setCountMode] = useState<'unique'|'tags'>('unique')
   const currentSnapshot = data.snapshots[current] || data.snapshot
-  const counts = countCategories(currentSnapshot.jobs)
+  const taxonomy = data.categoryHistory.taxonomy || {}
+  const currentPeriod = data.categoryHistory.periods.find(item => item.period === current)
+  const previousPeriod = data.categoryHistory.periods.find(item => item.period === baseline)
+  const tagTotal = (period: CategoryHistory['periods'][number] | undefined, major: string) => {
+    if (!period) return null
+    const scoped = period.sub_by_major?.[major]
+    if (scoped) return Object.values(scoped).reduce((sum, value) => sum + value, 0)
+    return (taxonomy[major] || []).reduce((sum, name) => sum + (period.sub[name] || 0), 0)
+  }
+  const uniqueCounts = countCategories(currentSnapshot.jobs)
+  const counts = uniqueCounts.map(item => ({
+    ...item,
+    count: countMode === 'unique' ? item.count : tagTotal(currentPeriod, item.name) ?? countSubCategoriesForMajor(currentSnapshot.jobs.filter(job => majorCategories(job).includes(item.name)), item.name, taxonomy).reduce((sum, row) => sum + row.count, 0),
+  }))
   const selected = params.get('major') || counts[0]?.name || ''
   const selectedSub = params.get('sub') || ''
   const [subQuery, setSubQuery] = useState('')
   const [page, setPage] = useState(1)
   const majorJobs = selected ? currentSnapshot.jobs.filter(j => majorCategories(j).includes(selected)) : []
-  const taxonomy = data.categoryHistory.taxonomy || {}
   const subCounts = countSubCategoriesForMajor(majorJobs, selected, taxonomy)
   const visibleSubs = subCounts.filter(item => item.name.toLowerCase().includes(subQuery.trim().toLowerCase()))
   const jobs = selectedSub ? majorJobs.filter(j => subCategoriesForMajor(j, selected, taxonomy).includes(selectedSub)) : majorJobs
   const pageSize = 40, pageCount = Math.max(1, Math.ceil(jobs.length / pageSize))
-  const currentPeriod = data.categoryHistory.periods.find(item => item.period === current)
-  const previousPeriod = data.categoryHistory.periods.find(item => item.period === baseline)
-  const trend = data.categoryHistory.periods.filter(item => item.period <= current).map(item => ({ month: item.period, total_open: (selectedSub ? (item.sub_by_major?.[selected]?.[selectedSub] ?? item.sub[selectedSub]) : item.major[selected]) || 0, new_count: null, closed_count: null }))
-  const currentCount = selectedSub ? (currentPeriod?.sub_by_major?.[selected]?.[selectedSub] ?? currentPeriod?.sub[selectedSub] ?? jobs.length) : (currentPeriod?.major[selected] ?? jobs.length)
-  const previousCount = previousPeriod ? (selectedSub ? (previousPeriod.sub_by_major?.[selected]?.[selectedSub] ?? previousPeriod.sub[selectedSub] ?? 0) : (previousPeriod.major[selected] ?? 0)) : null
+  const periodCount = (period: CategoryHistory['periods'][number], major: string) => selectedSub
+    ? (period.sub_by_major?.[major]?.[selectedSub] ?? period.sub[selectedSub] ?? 0)
+    : countMode === 'unique' ? (period.major[major] || 0) : (tagTotal(period, major) || 0)
+  const trend = data.categoryHistory.periods.filter(item => item.period <= current).map(item => ({ month: item.period, total_open: periodCount(item, selected), new_count: null, closed_count: null }))
+  const currentCount = currentPeriod ? periodCount(currentPeriod, selected) : selectedSub ? jobs.length : countMode === 'unique' ? majorJobs.length : subCounts.reduce((sum, item) => sum + item.count, 0)
+  const previousCount = previousPeriod ? periodCount(previousPeriod, selected) : null
   const change = previousCount == null ? null : currentCount - previousCount
   const majorCurrent = currentPeriod?.major[selected] ?? majorJobs.length
   const majorPrevious = previousPeriod?.major[selected] ?? null
-  const taxonomySubs = taxonomy[selected] || []
-  const subTagTotal = (period: CategoryHistory['periods'][number] | undefined) => period
-    ? taxonomySubs.reduce((sum, name) => sum + (period.sub_by_major?.[selected]?.[name] ?? period.sub[name] ?? 0), 0)
-    : null
-  const subCurrent = subTagTotal(currentPeriod) ?? subCounts.reduce((sum, item) => sum + item.count, 0)
-  const subPrevious = subTagTotal(previousPeriod)
+  const subCurrent = tagTotal(currentPeriod, selected) ?? subCounts.reduce((sum, item) => sum + item.count, 0)
+  const subPrevious = tagTotal(previousPeriod, selected)
   const categoryChange = (kind: 'major' | 'sub', name: string, major = selected) => {
     if (!currentPeriod || !previousPeriod) return null
     if (kind === 'sub') return (currentPeriod.sub_by_major?.[major]?.[name] ?? currentPeriod.sub[name] ?? 0) - (previousPeriod.sub_by_major?.[major]?.[name] ?? previousPeriod.sub[name] ?? 0)
-    return (currentPeriod.major[name] || 0) - (previousPeriod.major[name] || 0)
+    return countMode === 'unique'
+      ? (currentPeriod.major[name] || 0) - (previousPeriod.major[name] || 0)
+      : (tagTotal(currentPeriod, name) || 0) - (tagTotal(previousPeriod, name) || 0)
   }
-  useEffect(() => { setPage(1); setSubQuery('') }, [selected, selectedSub])
+  const countUnit = countMode === 'tags' && !selectedSub ? '개' : '건'
+  useEffect(() => { setPage(1); setSubQuery('') }, [selected, selectedSub, countMode])
   return <section className="category-page"><PageTitle eyebrow="JOB CATEGORY" title="직무별 채용" description="대분류에서 소분류를 선택하고 해당 직무의 변화와 공고를 확인하세요." />
-    <ComparisonControl periods={periods} baseline={baseline} current={current} setBaseline={setBaseline} setCurrent={setCurrent} />
-    <div className="taxonomy-note"><b>집계 기준</b><span>대분류는 중복을 제거한 공고 수입니다. 한 공고에 여러 소분류가 지정될 수 있어 소분류 합계는 대분류 공고 수와 다를 수 있으며, 선택한 대분류에 속한 소분류만 표시합니다.</span></div>
+    <div className="category-control-row"><ComparisonControl periods={periods} baseline={baseline} current={current} setBaseline={setBaseline} setCurrent={setCurrent} /><div className="count-mode-control"><span>대분류 집계</span><div className="segmented-control"><button className={countMode === 'unique' ? 'active' : ''} onClick={() => setCountMode('unique')}>고유 공고 기준</button><button className={countMode === 'tags' ? 'active' : ''} onClick={() => setCountMode('tags')}>직무 태그 기준</button></div></div></div>
+    <div className="taxonomy-note"><b>{countMode === 'unique' ? '고유 공고 기준' : '직무 태그 기준'}</b><span>{countMode === 'unique' ? '한 공고를 대분류별 한 번만 집계합니다. 소분류는 복수 태그가 가능하므로 합계가 대분류와 다를 수 있습니다.' : '대분류 숫자를 소분류 태그의 합으로 표시합니다. 한 공고가 여러 직무에 포함되면 중복 집계됩니다.'}</span></div>
     <div className="category-browser">
-      <aside className="major-rail"><div className="category-browser-title"><span>대분류 · 고유 공고</span><b>직무 선택</b></div><div className="major-list">{counts.map(x => { const delta = categoryChange('major', x.name); const previous = delta == null ? null : x.count - delta; return <button className={selected === x.name ? 'active' : ''} onClick={() => setParams({ major: x.name })} key={x.name} title={`${x.name} 고유 공고: ${previous == null ? '비교 기준 없음' : `${previous.toLocaleString()} → `}${x.count.toLocaleString()}건${delta == null ? '' : ` (${fmtChange(delta)})`}`}><span>{x.name}</span><span className="category-metric"><b>{x.count.toLocaleString()}건</b><ChangeBadge value={delta} /></span></button> })}</div></aside>
+      <aside className="major-rail"><div className="category-browser-title"><span>대분류 · {countMode === 'unique' ? '고유 공고' : '직무 태그'}</span><b>직무 선택</b></div><div className="major-list">{counts.map(x => { const delta = categoryChange('major', x.name); const previous = delta == null ? null : x.count - delta; const unit = countMode === 'unique' ? '건' : '개'; return <button className={selected === x.name ? 'active' : ''} onClick={() => setParams({ major: x.name })} key={x.name} title={`${x.name}: ${previous == null ? '비교 기준 없음' : `${previous.toLocaleString()} → `}${x.count.toLocaleString()}${unit}${delta == null ? '' : ` (${fmtChange(delta)})`}`}><span>{x.name}</span><span className="category-metric"><b>{x.count.toLocaleString()}{unit}</b><ChangeBadge value={delta} /></span></button> })}</div></aside>
       <div className="category-browser-content">
         <section className="subcategory-panel"><div className="category-browser-title"><span>소분류 · 중복 가능 태그</span><b>{selected} 세부 직무</b></div><label className="mini-search category-search"><Search size={17} /><input value={subQuery} onChange={event => setSubQuery(event.target.value)} placeholder="소분류 직무 검색" />{subQuery && <button onClick={() => setSubQuery('')} aria-label="검색어 지우기">×</button>}</label><div className="subcategory-list">{visibleSubs.map(x => { const delta = categoryChange('sub', x.name); const previous = delta == null ? null : x.count - delta; return <button className={selectedSub === x.name ? 'active' : ''} onClick={() => setParams({ major: selected, sub: x.name })} key={x.name} title={`${x.name} 직무 태그: ${previous == null ? '비교 기준 없음' : `${previous.toLocaleString()} → `}${x.count.toLocaleString()}개${delta == null ? '' : ` (${fmtChange(delta)})`}`}><span>{x.name}</span><span className="category-metric"><b>{x.count.toLocaleString()}개</b><ChangeBadge value={delta} /></span><ChevronRight size={16} /></button> })}{!visibleSubs.length && <p>검색 결과가 없습니다.</p>}</div><p className="category-overlap-note">각 숫자는 공고 수가 아니라 해당 공고에 붙은 직무 태그 수입니다.</p></section>
-        <section className="category-trend-card"><div className="category-trend-head"><div><span>선택 직무 추이</span><h2>{selectedSub || selected}</h2></div><div><strong>{currentCount.toLocaleString()}건</strong><small className={change != null && change < 0 ? 'down' : ''}>{change == null ? '비교 기준 없음' : `직전 기준일 대비 ${change > 0 ? '+' : ''}${change}건`}</small></div></div><Trend history={{ months: trend }} /></section>
+        <section className="category-trend-card"><div className="category-trend-head"><div><span>선택 직무 추이 · {selectedSub ? '소분류 공고' : countMode === 'unique' ? '고유 공고' : '직무 태그'}</span><h2>{selectedSub || selected}</h2></div><div><strong>{currentCount.toLocaleString()}{countUnit}</strong><small className={change != null && change < 0 ? 'down' : ''}>{change == null ? '비교 기준 없음' : `직전 기준일 대비 ${change > 0 ? '+' : ''}${change}${countUnit}`}</small></div></div><Trend history={{ months: trend }} /></section>
       </div>
     </div>
     <div className="category-reconciliation" aria-label={`${selected} 집계 단위 비교`}>
@@ -241,12 +255,15 @@ function Reports({ data }: { data: Data }) {
   const jobMoves = movementRows(stats.by_category || [])
   const companyMoves = movementRows(stats.by_company || [])
   const careerMoves = movementRows(stats.by_career || [])
+  const strongestJob = [...(stats.by_category || [])].filter(row => (row.change || 0) > 0).sort((a, b) => (b.change || 0) - (a.change || 0))[0]
+  const strongestCompany = [...(stats.by_company || [])].filter(row => (row.change || 0) > 0).sort((a, b) => (b.change || 0) - (a.change || 0))[0]
   const emptyText = '이번 달 해설을 준비하고 있습니다. 통계와 그래프는 정상적으로 확인할 수 있습니다.'
   return <section><PageTitle eyebrow="MONTHLY INSIGHT" title="월간 리포트" description={`${current} 채용시장 분석을 확인하세요.`} />
     <ComparisonControl periods={periods} baseline={baseline} current={current} setBaseline={setBaseline} setCurrent={setCurrent} />
     <div className="report-hero"><div><FileText size={28} /><span>{!officialPair ? '선택 기간 통계 비교' : hasReportContent ? '분석 완료' : report.status === 'complete' ? '생성 결과 확인 필요' : '통계 공개 · 해설 준비 중'}</span><h2>{current.replace('-', '년 ')}월<br />게임업계 채용 리포트</h2><p>{analysis?.outlook || `${baseline} → ${current} 채용 변화를 비교합니다.`}</p>{officialPair && report.generated_at && <small className="report-generated">GPT 생성 {formatDateTime(report.generated_at)}</small>}</div><div className="report-downloads">{officialPair && report.pdf_path && <a className="primary-button" href={report.pdf_path} download><Download size={17} /> PDF 요약본</a>}{officialPair && report.markdown && <a className="outline-button light" href={`reports/${report.period}.md`} download>Markdown <ArrowUpRight size={16} /></a>}</div></div>
     {report.is_sample && <div className="status-strip warning">화면 검증용 예시 리포트입니다.</div>}
     {!officialPair && <div className="data-warning"><AlertCircle size={20} /><div><b>선택한 기간은 통계 비교 모드입니다.</b><p>GPT 시장 해설과 PDF 요약본은 최신 공식 비교 기간인 {report.comparison_label || `${report.baseline_period} → ${report.current_period}`}에만 제공됩니다.</p></div></div>}
+    {analysis && <section className="monthly-conclusion"><div className="conclusion-main"><span>THIS MONTH'S VIEW</span><h2>이번 달의 결론</h2><p>{analysis.outlook}</p></div><div className="conclusion-points"><div><span>가장 강한 직무</span><b>{strongestJob?.name || '확인 필요'}</b><small>{strongestJob ? fmtChange(strongestJob.change) : '비교 데이터 없음'}</small></div><div><span>채용 확대 회사</span><b>{strongestCompany?.name || '확인 필요'}</b><small>{strongestCompany ? fmtChange(strongestCompany.change) : '비교 데이터 없음'}</small></div><div><span>다음 관찰 신호</span><b>{analysis.watchlist[0] || '다음 기간 데이터 확인'}</b></div></div></section>}
     <div className="report-kpis"><Kpi icon={BriefcaseBusiness} label="전체 공개 공고" value={`${(stats.total_open ?? 0).toLocaleString()}건`} sub={`전월 대비 ${fmtChange(stats.change)}`} primary /><Kpi icon={Sparkles} label="신규 공고" value={`${stats.new_count ?? '-'}건`} sub="이번 기간 새로 확인" /><Kpi icon={Clock3} label="종료 공고" value={`${stats.closed_count ?? '-'}건`} sub="이전 기간 대비 종료" /><Kpi icon={CheckCircle2} label="유지 공고" value={`${stats.maintained_count ?? '-'}건`} sub="두 기간 모두 확인" /></div>
     <div className="report-overview-grid"><Panel eyebrow="MARKET SIZE" title="전체 공고 비교"><ComparisonBars previous={stats.previous_total} current={stats.total_open} labels={[report.baseline_period || '이전 비교 데이터 없음', report.current_period || report.period]} /></Panel>{analysis ? <article className="analyst-summary"><span>ANALYST VIEW</span><h2>{analysis.outlook}</h2><p>{analysis.market_comment}</p><ul>{analysis.highlights.map(item => <li key={item}>{item}</li>)}</ul></article> : hasLegacyReport ? <article className="analyst-summary legacy"><span>ANALYST VIEW · 이전 형식</span><h2>생성된 시장 해설을 불러왔어요</h2><p>리포트 생성은 완료됐습니다. 아래에서 전체 해설을 확인할 수 있으며, 최신 구조로 다시 생성하면 카드형 분석으로 표시됩니다.</p></article> : report.status === 'complete' ? <Empty icon={AlertCircle} title="생성 결과 형식을 확인해 주세요" text="작업은 완료됐지만 해설 본문이 저장되지 않았습니다. 최신 Generate GPT Report - OpenAI 워크플로를 실행해 주세요." /> : <Empty icon={Sparkles} title="시장 해설을 준비하고 있어요" text={emptyText} />}</div>
     <div className="section-heading compact"><div><span>MOMENTUM CHARTS</span><h2>직무·회사·경력별 증감</h2></div><p>막대 길이는 전월 대비 변화량을 나타냅니다.</p></div>
@@ -286,6 +303,7 @@ function StructuredReport({ analysis, data }: { analysis: NonNullable<Report['an
   const jobs = new Map(data.snapshot.jobs.map(job => [job.id, job]))
   const news = new Map((data.report.news || []).map(item => [item.url, item]))
   const companyStats = new Map<string, {current:number;previous:number|null;change:number|null}>((data.report.statistics?.by_company || []).map((row:{name:string;current:number;previous:number|null;change:number|null}) => [row.name, row]))
+  const evidenceCounts = ['직접 근거', '관련 가능성', '근거 부족'].map(level => ({ level, count: analysis.news_signals.filter(item => item.evidence_level === level).length }))
   return <>
     <div className="section-heading compact"><div><span>JOB SIGNAL</span><h2>직무별 애널리스트 해설</h2></div></div>
     <div className="insight-grid">{analysis.job_insights.map(item => <article className="insight-card" key={`${item.name}-${item.direction}`}><div><span>{item.name}</span><b className={item.direction === '강세' ? 'positive' : item.direction === '약세' ? 'negative' : 'neutral'}>{item.direction}</b></div><p>{item.comment}</p></article>)}</div>
@@ -299,10 +317,15 @@ function StructuredReport({ analysis, data }: { analysis: NonNullable<Report['an
     })}</div>
 
     <div className="section-heading compact"><div><span>NEWS & HIRING SIGNAL</span><h2>뉴스와 채용 변화</h2></div><b>{analysis.news_signals.length}개 주요 신호</b></div>
-    {analysis.news_signals.length ? <div className="signal-grid">{analysis.news_signals.map((signal, index) => <article className="signal-card" key={`${signal.company}-${index}`}><div><span>{signal.company || '업계'}</span><b className={`evidence ${signal.evidence_level === '직접 근거' ? 'confirmed' : signal.evidence_level === '관련 가능성' ? 'possible' : ''}`}>{signal.evidence_level}</b></div><h3>{signal.headline}</h3><p>{signal.comment}</p><div className="source-links">{signal.news_urls.map(url => { const article = news.get(url); return article ? <a href={url} target="_blank" rel="noreferrer" key={url}><Newspaper size={14} />{article.title}<ArrowUpRight size={13} /></a> : null })}</div></article>)}</div> : <div className="data-warning"><AlertCircle size={20} /><div><b>채용 변화와 연결할 주요 뉴스가 없습니다.</b><p>근거가 부족한 원인은 추정하지 않습니다.</p></div></div>}
+    {analysis.news_signals.length ? <><div className="evidence-overview"><div><b>근거 강도</b><span>채용 발표처럼 직접 연결된 경우만 가장 높은 단계로 표시합니다.</span></div>{evidenceCounts.map(item => <div className={`evidence-count ${item.level === '직접 근거' ? 'confirmed' : item.level === '관련 가능성' ? 'possible' : 'weak'}`} key={item.level}><span>{item.level}</span><b>{item.count}건</b></div>)}</div><div className="signal-grid">{analysis.news_signals.map((signal, index) => <article className="signal-card" key={`${signal.company}-${index}`}><div><span>{signal.company || '업계'}</span><b className={`evidence ${signal.evidence_level === '직접 근거' ? 'confirmed' : signal.evidence_level === '관련 가능성' ? 'possible' : ''}`}>{signal.evidence_level}</b></div><h3>{signal.headline}</h3><p>{signal.comment}</p><EvidenceScale level={signal.evidence_level} /><div className="source-links">{signal.news_urls.map(url => { const article = news.get(url); return article ? <a href={url} target="_blank" rel="noreferrer" key={url}><Newspaper size={14} />{article.title}<ArrowUpRight size={13} /></a> : null })}</div></article>)}</div></> : <div className="data-warning"><AlertCircle size={20} /><div><b>채용 변화와 연결할 주요 뉴스가 없습니다.</b><p>근거가 부족한 원인은 추정하지 않습니다.</p></div></div>}
 
     <div className="report-bottom-grid"><article className="watch-card"><span>NEXT WATCHLIST</span><h2>다음 기간 관찰 포인트</h2><ol>{analysis.watchlist.map(item => <li key={item}>{item}</li>)}</ol></article><details className="limitations-card"><summary>데이터 한계와 해석 주의사항</summary><ul>{analysis.limitations.map(item => <li key={item}>{item}</li>)}</ul></details></div>
   </>
+}
+
+function EvidenceScale({ level }: { level:'직접 근거'|'관련 가능성'|'근거 부족' }) {
+  const active = level === '직접 근거' ? 3 : level === '관련 가능성' ? 2 : 1
+  return <div className={`evidence-scale level-${active}`} aria-label={`뉴스와 채용 연결 근거: ${level}`}><div>{['근거 부족', '관련 가능성', '직접 근거'].map((label, index) => <span className={index + 1 <= active ? 'active' : ''} key={label}><i />{label}</span>)}</div><p>{level === '직접 근거' ? '직접적인 채용 발표와 공고 변화가 일치합니다.' : level === '관련 가능성' ? '회사·프로젝트·시점이 연결되지만 인과는 확인되지 않았습니다.' : '같은 회사의 소식만으로 채용 변화의 원인을 판단하지 않습니다.'}</p></div>
 }
 
 function ReportMethod({ report }: { report: Report }) {
