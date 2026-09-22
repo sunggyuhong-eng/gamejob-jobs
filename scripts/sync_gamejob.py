@@ -88,7 +88,9 @@ def load_previous_opening_ids() -> set[str] | None:
 
 
 def main() -> int:
-    endpoint, token = os.getenv("SHEET_API_URL", ""), os.getenv("SHEET_API_TOKEN", "")
+    # GitHub Secret을 복사할 때 함께 들어간 줄바꿈이나 앞뒤 공백을 제거합니다.
+    endpoint = "".join(os.getenv("SHEET_API_URL", "").split())
+    token = os.getenv("SHEET_API_TOKEN", "").strip()
     if not endpoint or not token:
         raise RuntimeError("SHEET_API_URL 또는 SHEET_API_TOKEN Secret이 없습니다.")
 

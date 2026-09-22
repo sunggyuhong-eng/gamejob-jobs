@@ -1,7 +1,7 @@
 import { PIPELINE_STAGES, type Candidate, type DashboardData, type Opening, type PipelineStage } from './types'
 
 type SheetOpening = { project?: unknown; title?: unknown; targetTo?: unknown; reason?: unknown }
-type SheetCandidate = { id?: unknown; row?: unknown; name?: unknown; stage?: unknown; project?: unknown; openingTitle?: unknown; hireDate?: unknown }
+type SheetCandidate = { id?: unknown; row?: unknown; name?: unknown; stage?: unknown; project?: unknown; openingTitle?: unknown; hireDate?: unknown; firstInterviewDate?: unknown; secondInterviewDate?: unknown }
 type SheetPayload = {
   ok?: boolean
   error?: string
@@ -62,6 +62,8 @@ async function buildLiveDashboard(payload: SheetPayload, previous: DashboardData
       project: clean(source.project),
       openingTitle: clean(source.openingTitle),
       hireDate: clean(source.hireDate),
+      firstInterviewDate: clean(source.firstInterviewDate),
+      secondInterviewDate: clean(source.secondInterviewDate),
     }
     candidatesByOpening.set(key, [...(candidatesByOpening.get(key) || []), candidate])
   })

@@ -13,6 +13,8 @@ export type Candidate = {
   project: string
   openingTitle: string
   hireDate?: string
+  firstInterviewDate?: string
+  secondInterviewDate?: string
 }
 
 export type Opening = {

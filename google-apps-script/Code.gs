@@ -60,12 +60,16 @@ function dashboard_() {
 
   var candidateTable = table_(interview, ['진행단계','이름','직무(공고명)']);
   var col = candidateTable.columns;
-  var hireDateColumn = firstColumn_(col, ['입사 확정 날짜', '입사확정날짜', '입사 확정일', '입사확정일', '입사예정일']);
+  var hireDateColumn = firstColumn_(col, ['입사일', '입사 확정 날짜', '입사확정날짜', '입사 확정일', '입사확정일', '입사예정일']);
+  var firstInterviewColumn = firstColumn_(col, ['1차 면접 날짜', '1차면접날짜', '1차 면접일', '1차면접일', '1차 면접']);
+  var secondInterviewColumn = firstColumn_(col, ['2차 면접 날짜', '2차면접날짜', '2차 면접일', '2차면접일', '2차 면접']);
+  var timezone = ss.getSpreadsheetTimeZone();
   var candidates = [];
   var hiredCounts = {};
 
   for (var i = candidateTable.headerRow; i < candidateTable.values.length; i++) {
     var row = candidateTable.values[i];
+    var rawRow = candidateTable.rawValues[i] || [];
     var stage = clean_(row[col['진행단계']]);
     var name = clean_(row[col['이름']]);
     var title = clean_(row[col['직무(공고명)']]);
@@ -81,7 +85,9 @@ function dashboard_() {
         stage: stage,
         project: project,
         openingTitle: title,
-        hireDate: hireDateColumn == null ? '' : clean_(row[hireDateColumn])
+        hireDate: dateValue_(rawRow, row, hireDateColumn, timezone),
+        firstInterviewDate: dateValue_(rawRow, row, firstInterviewColumn, timezone),
+        secondInterviewDate: dateValue_(rawRow, row, secondInterviewColumn, timezone)
       });
     }
   }
@@ -119,14 +125,16 @@ function openingTable_(sheet) {
 }
 
 function table_(sheet, required) {
-  var values = sheet.getDataRange().getDisplayValues();
+  var range = sheet.getDataRange();
+  var values = range.getDisplayValues();
+  var rawValues = range.getValues();
   for (var r = 0; r < Math.min(values.length, 40); r++) {
     var columns = {};
     values[r].forEach(function(value, index) {
       if (clean_(value)) columns[clean_(value)] = index;
     });
     if (required.every(function(name) { return columns[name] != null; })) {
-      return { values: values, headerRow: r + 1, columns: columns };
+      return { values: values, rawValues: rawValues, headerRow: r + 1, columns: columns };
     }
   }
   throw new Error(sheet.getName() + ' 시트에서 필수 열(' + required.join(', ') + ')을 찾지 못했습니다.');
@@ -145,6 +153,15 @@ function firstColumn_(columns, names) {
     if (columns[names[i]] != null) return columns[names[i]];
   }
   return null;
+}
+
+function dateValue_(rawRow, displayRow, column, timezone) {
+  if (column == null) return '';
+  var raw = rawRow[column];
+  if (Object.prototype.toString.call(raw) === '[object Date]' && !isNaN(raw.getTime())) {
+    return Utilities.formatDate(raw, timezone || Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  }
+  return clean_(displayRow[column]);
 }
 
 function clean_(value) {
